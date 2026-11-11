@@ -1,0 +1,7 @@
+{
+  "name": "KP HUBE",
+  "description": "KP HUBE - Android video course app for aspiring YouTubers. Complete YouTube Course (₹499) with secure mobile student experience and owner dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

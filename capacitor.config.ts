@@ -1,0 +1,26 @@
+import type { CapacitorConfig } from '@capacitor/cli';
+
+const config: CapacitorConfig = {
+  appId: 'com.kphube.app',
+  appName: 'KP HUBE',
+  webDir: 'dist',
+  server: {
+    androidScheme: 'https',
+    cleartext: true
+  },
+  plugins: {
+    StatusBar: {
+      style: 'DARK',
+      backgroundColor: '#5B21B6'
+    },
+    SplashScreen: {
+      launchShowDuration: 1800,
+      launchAutoHide: true,
+      backgroundColor: '#FFFFFF',
+      androidSplashResourceName: 'splash',
+      androidScaleType: 'CENTER_CROP'
+    }
+  }
+};
+
+export default config;
