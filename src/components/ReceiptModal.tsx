@@ -1,15 +1,24 @@
 import React from 'react';
 import { X, Printer, CheckCircle, Download } from 'lucide-react';
-import type { PaymentRecord } from '../types/index.ts';
+import type { Course, PaymentRecord } from '../types/index.ts';
 
 interface ReceiptModalProps {
   isOpen: boolean;
   onClose: () => void;
   payment: PaymentRecord | null;
+  course?: Course | null;
+  totalLessons?: number;
 }
 
-export const ReceiptModal: React.FC<ReceiptModalProps> = ({ isOpen, onClose, payment }) => {
+export const ReceiptModal: React.FC<ReceiptModalProps> = ({
+  isOpen,
+  onClose,
+  payment,
+  course,
+  totalLessons
+}) => {
   if (!isOpen || !payment) return null;
+  const episodeCount = totalLessons || course?.totalLessons || 5;
 
   const handlePrint = () => {
     window.print();
@@ -101,17 +110,17 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ isOpen, onClose, pay
             <tbody className="divide-y divide-slate-100">
               <tr>
                 <td className="py-3">
-                  <div className="font-semibold text-slate-900">KP HUBE Complete YouTube Course</div>
-                  <div className="text-[11px] text-slate-500">14 Roman Hindi Lessons • Lifetime App Access</div>
+                  <div className="font-semibold text-slate-900">{course?.title || 'KP HUBE Complete YouTube Course'}</div>
+                  <div className="text-[11px] text-slate-500">{episodeCount} Video Episodes • Lifetime App Access</div>
                 </td>
                 <td className="py-3 text-center">1</td>
-                <td className="py-3 text-right font-semibold">₹499.00</td>
+                <td className="py-3 text-right font-semibold">₹{payment.amount.toFixed(2)}</td>
               </tr>
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-slate-900 font-bold text-sm">
                 <td className="py-3" colSpan={2}>Total Amount Paid</td>
-                <td className="py-3 text-right text-purple-900">₹499.00</td>
+                <td className="py-3 text-right text-purple-900">₹{payment.amount.toFixed(2)}</td>
               </tr>
             </tfoot>
           </table>

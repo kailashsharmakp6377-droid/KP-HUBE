@@ -1,23 +1,28 @@
 import React from 'react';
 import { Play, CheckCircle2, Sparkles, BookOpen, Clock, ShieldCheck, ArrowRight, Video } from 'lucide-react';
-import type { Course, Student } from '../types/index.ts';
+import type { Course, Lesson, Student } from '../types/index.ts';
 
 interface HomeScreenProps {
   course: Course;
+  lessons: Lesson[];
   student: Student | null;
   onViewCourse: () => void;
   onGoToMyCourse: () => void;
+  onOpenLesson: (lesson: Lesson) => void;
   onOpenPayment: () => void;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
   course,
+  lessons,
   student,
   onViewCourse,
   onGoToMyCourse,
+  onOpenLesson,
   onOpenPayment
 }) => {
   const isEnrolled = student?.isEnrolled || false;
+  const totalCount = lessons.length || course.totalLessons || 5;
 
   return (
     <div className="space-y-6 pb-20 animate-fade-in">
@@ -39,8 +44,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </h1>
             
             <p className="text-sm text-purple-100 max-w-lg leading-relaxed">
-              Namaste & Welcome to <span className="font-bold text-amber-300">KP HUBE</span>. 
-              Zero confusion, practical YouTube growth roadmap tailored for ambitious Indian creators. 
+              Welcome to <span className="font-bold text-amber-300">KP HUBE</span>.
+              Zero confusion, practical YouTube growth roadmap tailored for ambitious Indian creators.
               Learn how to build, scale, and monetize your channel from scratch.
             </p>
 
@@ -66,7 +71,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     onClick={onOpenPayment}
                     className="px-5 py-3 bg-white/10 hover:bg-white/20 text-white font-semibold text-sm rounded-xl border border-white/20 flex items-center gap-1.5 transition-all"
                   >
-                    <span>Enroll for ₹499</span>
+                    <span>Enroll for ₹{course.price}</span>
                   </button>
                 </>
               )}
@@ -109,7 +114,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             <div className="flex items-center gap-2 text-xs text-slate-500">
               <span className="font-semibold text-purple-700">Signature Course</span>
               <span aria-hidden="true">·</span>
-              <span>14 Roman Hindi Lessons</span>
+              <span>{totalCount} Video Episodes</span>
               <span aria-hidden="true">·</span>
               <span>Full Lifetime Access</span>
             </div>
@@ -176,42 +181,44 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
       </section>
 
-      {/* 3. 14 Lessons Overview Strip */}
+      {/* 3. Episodes Overview Strip */}
       <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-brand font-bold text-lg text-slate-900">Course Curriculum at a Glance</h3>
-            <p className="text-xs text-slate-500">14 comprehensive lessons delivered in Roman Hindi</p>
+            <h3 className="font-brand font-bold text-lg text-slate-900">Course Episodes at a Glance</h3>
+            <p className="text-xs text-slate-500">
+              {totalCount} episodes • Watch Episode 1 free preview now
+            </p>
           </div>
           <button
             onClick={onViewCourse}
             className="text-xs font-semibold text-purple-700 hover:text-purple-900 flex items-center gap-1"
           >
-            <span>See Full Syllabus</span>
+            <span>See All {totalCount} Episodes</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-          {[
-            { num: '01', title: 'YouTuber Kaise Banein' },
-            { num: '02', title: 'YouTube Channel Kaise Shuru Karein' },
-            { num: '03', title: 'Apne Channel Ke Liye Sahi Topic Kaise Chunein' },
-            { num: '04', title: 'Achhe Video Ideas Kaise Dhundhein' },
-            { num: '05', title: 'Catchy Video Titles Kaise Likhein' },
-            { num: '06', title: 'Aakarshak Thumbnails Kaise Banayein' }
-          ].map((item) => (
+          {lessons.slice(0, 6).map((lesson) => (
             <div
-              key={item.num}
-              onClick={onViewCourse}
-              className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-purple-50/40 hover:border-purple-200 cursor-pointer transition-all flex items-center gap-3"
+              key={lesson.id}
+              onClick={() => (lesson.isFreePreview ? onOpenLesson(lesson) : onViewCourse())}
+              className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-purple-50/40 hover:border-purple-200 cursor-pointer transition-all flex items-center justify-between gap-2.5"
             >
-              <span className="font-mono font-bold text-xs text-purple-700 bg-purple-100 w-7 h-7 rounded-lg flex items-center justify-center shrink-0">
-                {item.num}
-              </span>
-              <span className="text-xs font-semibold text-slate-800 line-clamp-1">
-                {item.title}
-              </span>
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="font-mono font-bold text-xs text-purple-700 bg-purple-100 w-7 h-7 rounded-lg flex items-center justify-center shrink-0">
+                  {String(lesson.order).padStart(2, '0')}
+                </span>
+                <span className="text-xs font-semibold text-slate-800 line-clamp-1">
+                  {lesson.title}
+                </span>
+              </div>
+              {lesson.isFreePreview && (
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full shrink-0">
+                  FREE
+                </span>
+              )}
             </div>
           ))}
         </div>

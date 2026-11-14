@@ -8,6 +8,8 @@ import type { Student, PaymentRecord } from '../types/index.ts';
 
 interface ProfileScreenProps {
   student: Student | null;
+  coursePrice?: number;
+  totalLessons?: number;
   onOpenAuth: () => void;
   onLogout: () => void;
   onGoToCourse: () => void;
@@ -20,6 +22,8 @@ interface ProfileScreenProps {
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   student,
+  coursePrice = 499,
+  totalLessons = 5,
   onOpenAuth,
   onLogout,
   onGoToCourse,
@@ -177,7 +181,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             <div>
               <span className="text-xs font-bold text-slate-900 block">My Course</span>
               <span className="text-[11px] text-slate-500">
-                {student.isEnrolled ? 'Open 14 lessons & study materials' : 'Unlock full course for ₹499'}
+                {student.isEnrolled
+                  ? `Open all ${totalLessons} episodes & study materials`
+                  : `Unlock full course for ₹${coursePrice}`}
               </span>
             </div>
           </div>

@@ -49,7 +49,7 @@ export const CourseDetailsScreen: React.FC<CourseDetailsScreenProps> = ({
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
               <span className="font-semibold text-purple-700">Official Course</span>
               <span aria-hidden="true">·</span>
-              <span>14 Roman Hindi Lessons</span>
+              <span>{lessons.length || course.totalLessons} Video Episodes</span>
               <span aria-hidden="true">·</span>
               <span>{course.enrolledCount}+ Creators Enrolled</span>
             </div>
@@ -97,15 +97,17 @@ export const CourseDetailsScreen: React.FC<CourseDetailsScreenProps> = ({
         </div>
       </section>
 
-      {/* 3. Detailed 14-Lesson Curriculum List */}
+      {/* 3. Detailed Curriculum List */}
       <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 space-y-4">
         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
           <div>
-            <h2 className="font-brand font-bold text-xl text-slate-900">Course Curriculum</h2>
-            <p className="text-xs text-slate-500">14 comprehensive lessons with practical creator frameworks</p>
+            <h2 className="font-brand font-bold text-xl text-slate-900">Course Episodes</h2>
+            <p className="text-xs text-slate-500">
+              Watch Episode 1 free preview to see what is inside this course
+            </p>
           </div>
           <span className="text-xs font-semibold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-lg">
-            {lessons.length} Lessons
+            {lessons.length} Episodes
           </span>
         </div>
 
@@ -158,18 +160,22 @@ export const CourseDetailsScreen: React.FC<CourseDetailsScreenProps> = ({
                       </p>
                     )}
 
-                    <p className="text-xs text-slate-600 line-clamp-1">
-                      {lesson.description}
-                    </p>
+                    {lesson.description && (
+                      <p className="text-xs text-slate-600 line-clamp-1">
+                        {lesson.description}
+                      </p>
+                    )}
 
                     <div className="flex items-center gap-3 text-[11px] text-slate-500 pt-1">
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5 text-slate-400" />
-                        {lesson.durationMinutes} mins
-                      </span>
+                      {lesson.durationMinutes > 0 && (
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5 text-slate-400" />
+                          {lesson.durationMinutes} mins
+                        </span>
+                      )}
                       {isAwaiting ? (
                         <span className="text-amber-700 font-medium bg-amber-50 px-1.5 py-0.5 rounded text-[10px]">
-                          Awaiting video upload
+                          Coming Soon • Video Upload Pending
                         </span>
                       ) : (
                         <span className="text-emerald-700 font-medium flex items-center gap-1 text-[10px]">
@@ -230,7 +236,7 @@ export const CourseDetailsScreen: React.FC<CourseDetailsScreenProps> = ({
               className="flex-1 h-12 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-purple-700/25 active:scale-95 transition-all"
             >
               <ShieldCheck className="w-4 h-4 text-amber-400" />
-              <span>BUY NOW • ₹499</span>
+              <span>BUY NOW • ₹{course.price}</span>
             </button>
           </div>
         </div>

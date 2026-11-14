@@ -51,9 +51,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         orderId: order.orderId,
         amountRupees: order.amountRupees,
         receiptNumber: order.receiptNumber,
-        upiVpa: upiStatus.verifiedUpiVpa || 'kailash100k@axl',
+        upiVpa: order.upiVpa || upiStatus.verifiedUpiVpa || 'kailash100k@axl',
         qrImageUrl: '/assets/payment_qr.jpeg',
-        upiIntentUrl: `upi://pay?pa=${encodeURIComponent(upiStatus.verifiedUpiVpa || 'kailash100k@axl')}&pn=${encodeURIComponent('KP HUBE')}&am=499&cu=INR&tn=${encodeURIComponent('KP HUBE Complete YouTube Course')}`
+        upiIntentUrl:
+          order.upiIntentUrl ||
+          `upi://pay?pa=${encodeURIComponent(upiStatus.verifiedUpiVpa || 'kailash100k@axl')}&pn=${encodeURIComponent('KP HUBE')}&am=${order.amountRupees}&cu=INR&tn=${encodeURIComponent('KP HUBE Complete YouTube Course')}`
       });
     } catch (err: any) {
       console.error(err);
@@ -80,12 +82,17 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     e.preventDefault();
     if (!orderData) return;
 
+    const cleanUtr = utrInput.trim();
+    if (cleanUtr.length < 8) {
+      setErrorMessage('Please enter your valid 12-digit UTR / Transaction Ref number (minimum 8 characters).');
+      return;
+    }
+
     setStep('verifying');
     setErrorMessage(null);
 
     try {
-      const cleanUtr = utrInput.trim() || `UTR_${Date.now().toString().slice(-8)}`;
-      const res = await api.verifyPayment({
+      await api.verifyPayment({
         orderId: orderData.orderId,
         paymentId: cleanUtr
       });
@@ -138,7 +145,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               {/* Price Banner */}
               <div className="bg-[#f1f5ff] p-3 rounded-2xl border border-indigo-100 flex items-center justify-between">
                 <span className="text-xs font-semibold text-[#14213d]">Amount Payable</span>
-                <span className="font-brand font-black text-2xl text-[#4f46e5]">₹499</span>
+                <span className="font-brand font-black text-2xl text-[#4f46e5]">₹{orderData.amountRupees}</span>
               </div>
 
               {/* Direct UPI App Intent Trigger (Mobile Users) */}
@@ -194,11 +201,19 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 <label className="block text-xs font-bold text-[#14213d]">
                   Payment Confirmation (UTR / Ref No.)
                 </label>
+                {errorMessage && (
+                  <p className="text-[11px] text-rose-600 font-semibold">{errorMessage}</p>
+                )}
                 <input
                   type="text"
                   placeholder="Enter 12-digit UTR Number from PhonePe"
                   value={utrInput}
-                  onChange={(e) => setUtrInput(e.target.value)}
+                  onChange={(e) => {
+                    setUtrInput(e.target.value);
+                    if (errorMessage) setErrorMessage(null);
+                  }}
+                  minLength={8}
+                  required
                   className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:border-[#4f46e5] focus:outline-none font-mono"
                 />
                 <button
@@ -217,7 +232,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 Verifying UPI Transaction...
               </h4>
               <p className="text-xs text-slate-500 max-w-xs mx-auto">
-                Recording your payment reference and activating lifetime access to all 14 YouTube course lessons.
+                Recording your payment reference and activating lifetime access to all course episodes.
               </p>
             </div>
           ) : step === 'success' ? (
@@ -229,7 +244,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 Payment Verified!
               </h4>
               <p className="text-xs text-slate-600">
-                Your payment of <strong>₹499</strong> has been verified. The <strong>KP HUBE Complete YouTube Course</strong> is now unlocked.
+                Your payment of <strong>₹{orderData?.amountRupees || 499}</strong> has been verified. The <strong>KP HUBE Complete YouTube Course</strong> is now unlocked.
               </p>
               <button
                 onClick={onClose}

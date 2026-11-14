@@ -24,7 +24,7 @@ export const FourCardsConceptView: React.FC<FourCardsConceptViewProps> = ({
   const [identifierInput, setIdentifierInput] = useState(student?.email || student?.phone || '');
 
   const completedCount = student ? student.completedLessonIds.length : 0;
-  const totalCount = lessons.length || 14;
+  const totalCount = lessons.length || course.totalLessons || 5;
   const progressPercent = Math.round((completedCount / totalCount) * 100);
 
   return (
@@ -230,7 +230,7 @@ export const FourCardsConceptView: React.FC<FourCardsConceptViewProps> = ({
                 <div className="space-y-1.5 text-[13px]">
                   <p className="flex items-center gap-2">
                     <span className="text-[#059669] font-bold">✓</span>
-                    <span>14 video lessons (Roman Hindi)</span>
+                    <span>{totalCount} video episodes (Episode 1 – {totalCount})</span>
                   </p>
                   <p className="flex items-center gap-2">
                     <span className="text-[#059669] font-bold">✓</span>
@@ -353,7 +353,8 @@ export const FourCardsConceptView: React.FC<FourCardsConceptViewProps> = ({
                           {String(lesson.order).padStart(2, '0')}  {lesson.title}
                         </p>
                         <p className="text-[10px] text-[#8a95a8]">
-                          {lesson.videoUrl ? 'Video Ready' : lesson.isFreePreview ? 'Free Preview' : 'Course Lesson'} • {lesson.durationMinutes}:00
+                          {lesson.videoUrl ? 'Video Ready' : lesson.isFreePreview ? 'Free Preview' : 'Coming Soon'}
+                          {lesson.durationMinutes > 0 ? ` • ${lesson.durationMinutes}:00` : ''}
                         </p>
                       </div>
                     </div>

@@ -146,6 +146,10 @@ export default function App() {
   }
 
   const canAccessAdmin = Boolean(student?.isOwner || storage.getAdminToken());
+  const activePreviewLesson = selectedLessonId
+    ? lessons.find(l => l.id === selectedLessonId && l.isFreePreview)
+    : undefined;
+  const showCoursePlayer = Boolean(student?.isEnrolled || activePreviewLesson);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#f1f5ff] to-[#e8f7f3] text-slate-900 flex flex-col selection:bg-indigo-100 selection:text-indigo-900">
@@ -155,6 +159,7 @@ export default function App() {
         onSelectTab={(tab) => {
           setIsAdminActive(false);
           setAppMode('live_app');
+          setSelectedLessonId(undefined);
           setCurrentTab(tab);
         }}
         student={student}
@@ -220,11 +225,27 @@ export default function App() {
               {currentTab === 'home' ? (
                 <HomeScreen
                   course={course!}
+                  lessons={lessons}
                   student={student}
-                  onViewCourse={() => setCurrentTab('course')}
+                  onViewCourse={() => {
+                    setSelectedLessonId(undefined);
+                    setCurrentTab('course');
+                  }}
                   onGoToMyCourse={() => setCurrentTab('course')}
+                  onOpenLesson={(lesson) => {
+                    if (lesson.isFreePreview || student?.isEnrolled) {
+                      setSelectedLessonId(lesson.id);
+                      setCurrentTab('course');
+                    } else if (!student) {
+                      setPendingPaymentAfterAuth(true);
+                      setShowAuthModal(true);
+                    } else {
+                      setShowPaymentModal(true);
+                    }
+                  }}
                   onOpenPayment={() => {
                     if (!student) {
+                      setPendingPaymentAfterAuth(true);
                       setShowAuthModal(true);
                     } else {
                       setShowPaymentModal(true);
@@ -232,14 +253,22 @@ export default function App() {
                   }}
                 />
               ) : currentTab === 'course' ? (
-                student?.isEnrolled ? (
+                showCoursePlayer ? (
                   <MyCourseScreen
                     course={course!}
                     lessons={lessons}
                     student={student}
-                    onOpenPayment={() => setShowPaymentModal(true)}
+                    onOpenPayment={() => {
+                      if (!student) {
+                        setPendingPaymentAfterAuth(true);
+                        setShowAuthModal(true);
+                      } else {
+                        setShowPaymentModal(true);
+                      }
+                    }}
                     selectedLessonId={selectedLessonId}
                     onRefreshStudent={handleRefreshStudent}
+                    onBackToCourse={!student?.isEnrolled ? () => setSelectedLessonId(undefined) : undefined}
                   />
                 ) : (
                   <CourseDetailsScreen
@@ -248,6 +277,7 @@ export default function App() {
                     student={student}
                     onOpenPayment={() => {
                       if (!student) {
+                        setPendingPaymentAfterAuth(true);
                         setShowAuthModal(true);
                       } else {
                         setShowPaymentModal(true);
@@ -256,6 +286,9 @@ export default function App() {
                     onOpenLesson={(lesson) => {
                       if (lesson.isFreePreview || student?.isEnrolled) {
                         setSelectedLessonId(lesson.id);
+                      } else if (!student) {
+                        setPendingPaymentAfterAuth(true);
+                        setShowAuthModal(true);
                       } else {
                         setShowPaymentModal(true);
                       }
@@ -265,9 +298,14 @@ export default function App() {
               ) : (
                 <ProfileScreen
                   student={student}
+                  coursePrice={course?.price}
+                  totalLessons={lessons.length || course?.totalLessons}
                   onOpenAuth={() => setShowAuthModal(true)}
                   onLogout={handleLogout}
-                  onGoToCourse={() => setCurrentTab('course')}
+                  onGoToCourse={() => {
+                    setSelectedLessonId(undefined);
+                    setCurrentTab('course');
+                  }}
                   onOpenSupport={() => setShowSupportModal(true)}
                   onOpenAccountDeletion={() => setShowAccountDeletionModal(true)}
                   onViewReceipt={(payment) => setSelectedReceipt(payment)}
@@ -286,6 +324,7 @@ export default function App() {
           currentTab={currentTab}
           onSelectTab={(tab) => {
             setIsAdminActive(false);
+            if (tab !== 'course') setSelectedLessonId(undefined);
             setCurrentTab(tab);
           }}
           isEnrolled={student?.isEnrolled || false}
@@ -324,6 +363,8 @@ export default function App() {
         isOpen={Boolean(selectedReceipt)}
         onClose={() => setSelectedReceipt(null)}
         payment={selectedReceipt}
+        course={course}
+        totalLessons={lessons.length || course?.totalLessons}
       />
 
       <SupportModal

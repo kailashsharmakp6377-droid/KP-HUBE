@@ -48,6 +48,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
   const [uploadedApkSize, setUploadedApkSize] = useState(0);
   const [apkStatusMsg, setApkStatusMsg] = useState<string | null>(null);
   const [apkSaving, setApkSaving] = useState(false);
+  const [adminToast, setAdminToast] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
+  const [confirmDeleteLesson, setConfirmDeleteLesson] = useState<{ id: string; title: string } | null>(null);
 
   // Check login
   const handleAdminLogin = async (e: React.FormEvent) => {
@@ -124,21 +126,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
       }
       setEditingLesson(null);
       setIsNewLesson(false);
+      setAdminToast({ type: 'success', text: 'Episode saved successfully.' });
       fetchAdminData();
       onRefreshData();
     } catch (err: any) {
-      alert(err.message || 'Failed to save lesson');
+      setAdminToast({ type: 'error', text: err.message || 'Failed to save episode' });
     }
   };
 
-  const handleDeleteLesson = async (id: string, title: string) => {
-    if (!window.confirm(`Are you sure you want to delete lesson: "${title}"?`)) return;
+  const handleConfirmDeleteLesson = async () => {
+    if (!confirmDeleteLesson) return;
     try {
-      await api.deleteLesson(id);
+      await api.deleteLesson(confirmDeleteLesson.id);
+      setConfirmDeleteLesson(null);
+      setAdminToast({ type: 'success', text: 'Episode deleted.' });
       fetchAdminData();
       onRefreshData();
     } catch (err: any) {
-      alert(err.message || 'Failed to delete lesson');
+      setAdminToast({ type: 'error', text: err.message || 'Failed to delete episode' });
+      setConfirmDeleteLesson(null);
     }
   };
 
@@ -155,7 +161,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
       fetchAdminData();
       onRefreshData();
     } catch (err: any) {
-      alert(err.message || 'Failed to reorder lessons');
+      setAdminToast({ type: 'error', text: err.message || 'Failed to reorder episodes' });
     }
   };
 
@@ -165,7 +171,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
       fetchAdminData();
       onRefreshData();
     } catch (err: any) {
-      alert(err.message || 'Failed to update visibility');
+      setAdminToast({ type: 'error', text: err.message || 'Failed to update visibility' });
     }
   };
 
@@ -181,10 +187,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
       setSelectedStudentForAction(null);
       setActionType(null);
       setGrantReason('');
+      setAdminToast({ type: 'success', text: 'Student access updated.' });
       fetchAdminData();
       onRefreshData();
     } catch (err: any) {
-      alert(err.message || 'Failed to update student access');
+      setAdminToast({ type: 'error', text: err.message || 'Failed to update student access' });
     }
   };
 
@@ -198,7 +205,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
       fetchAdminData();
       onRefreshData();
     } catch (err: any) {
-      alert(err.message || 'Failed to update course');
+      setAdminToast({ type: 'error', text: err.message || 'Failed to update course' });
     }
   };
 
@@ -216,7 +223,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
       setBackupStatusMsg('Full JSON backup downloaded successfully.');
       setTimeout(() => setBackupStatusMsg(null), 4000);
     } catch (err: any) {
-      alert(err.message || 'Failed to export backup');
+      setAdminToast({ type: 'error', text: err.message || 'Failed to export backup' });
     }
   };
 
@@ -233,7 +240,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
       onRefreshData();
       setTimeout(() => setBackupStatusMsg(null), 5000);
     } catch (err: any) {
-      alert(err.message || 'Invalid backup file');
+      setAdminToast({ type: 'error', text: err.message || 'Invalid backup file' });
     } finally {
       e.target.value = '';
     }
@@ -349,11 +356,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
         </div>
       </div>
 
+      {/* Admin Inline Toast Banner */}
+      {adminToast && (
+        <div
+          className={`p-3.5 rounded-2xl border text-xs flex items-center justify-between gap-3 ${
+            adminToast.type === 'error'
+              ? 'bg-rose-50 border-rose-200 text-rose-800'
+              : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+          }`}
+        >
+          <span className="font-semibold">{adminToast.text}</span>
+          <button
+            onClick={() => setAdminToast(null)}
+            className="p-1 rounded-lg hover:bg-black/5 shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Admin Tab Navigation */}
       <div className="flex overflow-x-auto gap-1.5 p-1.5 bg-white rounded-2xl border border-slate-200 shadow-xs text-xs font-medium scrollbar-none">
         {[
           { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-          { id: 'lessons', label: '14 Lessons Manager', icon: BookOpen },
+          { id: 'lessons', label: `${lessons.length || 5} Episodes Manager`, icon: BookOpen },
           { id: 'students', label: 'Students Roster', icon: Users },
           { id: 'payments', label: 'Transactions & Fraud Log', icon: CreditCard },
           { id: 'course', label: 'Course Settings & Founder', icon: Settings },
@@ -389,7 +415,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
               <span className="font-brand font-black text-2xl text-purple-900 mt-1 block">
                 ₹{overview.totalRevenue.toLocaleString('en-IN')}
               </span>
-              <span className="text-[10px] text-slate-500">₹499 per verified student</span>
+              <span className="text-[10px] text-slate-500">₹{overview.coursePrice || 499} per verified student</span>
             </div>
 
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
@@ -476,17 +502,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
         <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
             <div>
-              <h2 className="font-brand font-bold text-lg text-slate-900">14 Course Lessons Manager</h2>
-              <p className="text-xs text-slate-500">Add video streams, attach study PDFs, reorder, or edit Roman Hindi titles</p>
+              <h2 className="font-brand font-bold text-lg text-slate-900">{lessons.length} Course Episodes Manager</h2>
+              <p className="text-xs text-slate-500">Upload video links (YouTube, Google Drive, or MP4), attach PDFs, reorder, or edit episode titles</p>
             </div>
             <button
               onClick={() => {
                 setIsNewLesson(true);
                 setEditingLesson({
-                  title: '',
+                  title: `Episode ${lessons.length + 1}`,
                   englishSubtitle: '',
                   description: '',
-                  durationMinutes: 20,
+                  durationMinutes: 0,
                   videoUrl: '',
                   videoType: 'awaiting_upload',
                   pdfUrl: '',
@@ -498,9 +524,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
               className="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white font-semibold text-xs rounded-xl flex items-center gap-1.5 shadow-sm transition-colors"
             >
               <Plus className="w-4 h-4" />
-              <span>Add New Lesson</span>
+              <span>Add New Episode</span>
             </button>
           </div>
+
+          {/* Delete Episode Confirmation Modal */}
+          {confirmDeleteLesson && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+              <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 p-6 w-full max-w-sm space-y-4 text-xs">
+                <h3 className="font-brand font-bold text-sm text-slate-900">Delete Episode?</h3>
+                <p className="text-slate-600">
+                  Are you sure you want to delete <strong>"{confirmDeleteLesson.title}"</strong>?
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDeleteLesson(null)}
+                    className="flex-1 h-9 rounded-xl border border-slate-200 text-slate-700 font-semibold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmDeleteLesson}
+                    className="flex-1 h-9 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold"
+                  >
+                    Confirm Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Lesson Edit/Create Modal */}
           {editingLesson && (
@@ -508,7 +562,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
               <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto space-y-4">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <h3 className="font-brand font-bold text-base text-slate-900">
-                    {isNewLesson ? 'Add New Lesson' : `Edit Lesson #${editingLesson.order}`}
+                    {isNewLesson ? 'Add New Episode' : `Edit Episode #${editingLesson.order}`}
                   </h3>
                   <button onClick={() => setEditingLesson(null)} className="p-1 rounded-full text-slate-400 hover:text-slate-700">
                     <X className="w-5 h-5" />
@@ -518,13 +572,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
                 <form onSubmit={handleSaveLesson} className="space-y-3 text-xs">
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">
-                      Lesson Title (Roman Hindi)
+                      Episode Title
                     </label>
                     <input
                       type="text"
                       value={editingLesson.title || ''}
                       onChange={(e) => setEditingLesson({ ...editingLesson, title: e.target.value })}
-                      placeholder="e.g. YouTuber Kaise Banein"
+                      placeholder="e.g. Episode 2"
                       className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:border-purple-600 focus:outline-none"
                       required
                     />
@@ -532,13 +586,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
 
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">
-                      English Subtitle / Translation
+                      Subtitle / Topic (Optional)
                     </label>
                     <input
                       type="text"
                       value={editingLesson.englishSubtitle || ''}
                       onChange={(e) => setEditingLesson({ ...editingLesson, englishSubtitle: e.target.value })}
-                      placeholder="e.g. How to Become a Successful YouTuber"
+                      placeholder="e.g. Channel Setup & Niche Selection"
                       className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:border-purple-600 focus:outline-none"
                     />
                   </div>
@@ -548,8 +602,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
                       <label className="block font-semibold text-slate-700 mb-1">Duration (Minutes)</label>
                       <input
                         type="number"
-                        min={1}
-                        value={editingLesson.durationMinutes || 15}
+                        min={0}
+                        value={editingLesson.durationMinutes ?? 0}
                         onChange={(e) => setEditingLesson({ ...editingLesson, durationMinutes: Number(e.target.value) })}
                         className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:border-purple-600 focus:outline-none"
                         required
@@ -565,6 +619,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
                         <option value="awaiting_upload">Awaiting Upload (No Video Yet)</option>
                         <option value="youtube">YouTube (Unlisted / Public)</option>
                         <option value="mp4">Direct MP4 / HLS Video URL</option>
+                        <option value="drive">Google Drive Video Link</option>
                         <option value="vimeo">Vimeo Embed</option>
                       </select>
                     </div>
@@ -740,9 +795,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
                   </button>
 
                   <button
-                    onClick={() => handleDeleteLesson(lesson.id, lesson.title)}
+                    onClick={() => setConfirmDeleteLesson({ id: lesson.id, title: lesson.title })}
                     className="p-1.5 rounded-lg border border-slate-200 text-rose-600 hover:bg-rose-50"
-                    title="Delete Lesson"
+                    title="Delete Episode"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

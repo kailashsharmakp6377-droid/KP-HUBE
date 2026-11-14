@@ -59,10 +59,10 @@ const DEFAULT_COURSE: Course = {
   founderRole: 'YouTube Growth Specialist & Content Creator',
   founderBio: 'Dedicated to helping Indian aspiring creators build, monetize, and scale high-impact YouTube channels from scratch.',
   announcement: 'Special inaugural batch access for just ₹499 one-time. Lifetime access included.',
-  totalLessons: 14,
+  totalLessons: 5,
   enrolledCount: 142,
   features: [
-    '14 Step-by-Step Roman Hindi Lessons',
+    '5 Step-by-Step Video Episodes',
     'Mobile-First Video Player with Speed Control',
     'Shorts Viral Algorithm Framework',
     'Monetization & Brand Sponsorship Guide',
@@ -73,169 +73,74 @@ const DEFAULT_COURSE: Course = {
 
 const DEFAULT_LESSONS: Lesson[] = [
   {
-    id: 'lesson-01',
+    id: 'episode-01',
     order: 1,
-    title: 'YouTuber Kaise Banein',
-    englishSubtitle: 'How to Become a Successful YouTuber',
-    description: 'Creator mindset, essential equipment checklist (smartphones to mics), and your YouTube roadmap.',
-    durationMinutes: 18,
-    videoType: 'awaiting_upload',
+    title: 'Episode 1',
+    englishSubtitle: 'Course Preview — What You Will Learn',
+    description: 'Introduction to the KP HUBE Complete YouTube Course and what is included across all 5 episodes.',
+    durationMinutes: 1,
+    videoUrl: '/assets/episode-01-intro.mp4',
+    videoType: 'mp4',
     isPublished: true,
     isFreePreview: true
   },
-  {
-    id: 'lesson-02',
-    order: 2,
-    title: 'YouTube Channel Kaise Shuru Karein',
-    englishSubtitle: 'Starting Your YouTube Channel Step-by-Step',
-    description: 'Setting up Google account, channel name, handle, category, and phone number verification.',
-    durationMinutes: 24,
-    videoType: 'awaiting_upload',
-    isPublished: true,
-    isFreePreview: false
-  },
-  {
-    id: 'lesson-03',
-    order: 3,
-    title: 'Apne Channel Ke Liye Sahi Topic Kaise Chunein',
-    englishSubtitle: 'How to Choose the Right Niche for Your Channel',
-    description: 'High-RPM niches, balancing your passion with audience demand, and market gap analysis.',
-    durationMinutes: 21,
-    videoType: 'awaiting_upload',
-    isPublished: true,
-    isFreePreview: false
-  },
-  {
-    id: 'lesson-04',
-    order: 4,
-    title: 'Achhe Video Ideas Kaise Dhundhein',
-    englishSubtitle: 'How to Find Winning Video Ideas Consistently',
-    description: 'Researching trending topics, Google Trends, competitor analysis, and generating 50+ ideas in 1 hour.',
-    durationMinutes: 26,
-    videoType: 'awaiting_upload',
-    isPublished: true,
-    isFreePreview: false
-  },
-  {
-    id: 'lesson-05',
-    order: 5,
-    title: 'Catchy Video Titles Kaise Likhein',
-    englishSubtitle: 'How to Write Click-Worthy Video Titles',
-    description: 'Curiosity gaps, emotional triggers, search volume optimization, and avoiding clickbait penalties.',
-    durationMinutes: 19,
-    videoType: 'awaiting_upload',
-    isPublished: true,
-    isFreePreview: false
-  },
-  {
-    id: 'lesson-06',
-    order: 6,
-    title: 'Aakarshak Thumbnails Kaise Banayein',
-    englishSubtitle: 'How to Design High CTR Thumbnails',
-    description: 'Thumbnail design rules on mobile screens, high contrast colors, facial emotion, and typography.',
-    durationMinutes: 32,
-    videoType: 'awaiting_upload',
-    isPublished: true,
-    isFreePreview: false
-  },
-  {
-    id: 'lesson-07',
-    order: 7,
-    title: 'YouTube Shorts Kaise Banayein',
-    englishSubtitle: 'How to Create Engaging YouTube Shorts',
-    description: 'Vertical 9:16 video production, 3-second hook structure, and fast-paced mobile storytelling.',
-    durationMinutes: 22,
-    videoType: 'awaiting_upload',
-    isPublished: true,
-    isFreePreview: false
-  },
-  {
-    id: 'lesson-08',
-    order: 8,
-    title: 'Shorts Ko Zyada Logon Tak Kaise Pahunchayein',
-    englishSubtitle: 'How to Push Shorts into the YouTube Algorithm',
-    description: 'Retention rate mastery, swipe-away ratio optimization, sound trends, and hashtag tactics.',
-    durationMinutes: 25,
-    videoType: 'awaiting_upload',
-    isPublished: true,
-    isFreePreview: false
-  },
-  {
-    id: 'lesson-09',
-    order: 9,
-    title: 'Video Ka Watch Time Kaise Badhayein',
-    englishSubtitle: 'How to Maximize Video Watch Time and Retention',
-    description: 'Pattern interrupts, B-roll insertion, pacing, sound effects, and retaining viewers until the end.',
-    durationMinutes: 28,
-    videoType: 'awaiting_upload',
-    isPublished: true,
-    isFreePreview: false
-  },
-  {
-    id: 'lesson-10',
-    order: 10,
-    title: 'Viewers Ko Videos Se Kaise Jode Rakhein',
-    englishSubtitle: 'How to Keep Viewers Hooked and Build Community',
-    description: 'Community tab strategy, interactive polls, pinned comment engagement, and subscriber conversion.',
-    durationMinutes: 20,
-    videoType: 'awaiting_upload',
-    isPublished: true,
-    isFreePreview: false
-  },
-  {
-    id: 'lesson-11',
-    order: 11,
-    title: 'YouTube Channel Ko Grow Kaise Karein',
-    englishSubtitle: 'How to Scale and Grow Your YouTube Channel',
-    description: 'Mastering YouTube Analytics Studio: Impressions, Click-Through-Rate (CTR), and Average View Duration.',
-    durationMinutes: 35,
-    videoType: 'awaiting_upload',
-    isPublished: true,
-    isFreePreview: false
-  },
-  {
-    id: 'lesson-12',
-    order: 12,
-    title: 'YouTube Channel Ko Monetize Kaise Karein',
-    englishSubtitle: 'How to Monetize Your Channel Beyond AdSense',
-    description: 'YPP eligibility requirements, brand sponsorship pitch decks, affiliate links, and digital merchandising.',
-    durationMinutes: 30,
-    videoType: 'awaiting_upload',
-    isPublished: true,
-    isFreePreview: false
-  },
-  {
-    id: 'lesson-13',
-    order: 13,
-    title: '90 Din Mein Channel Ko Grow Karne Ka Plan',
-    englishSubtitle: '90-Day Step-by-Step Channel Growth Action Plan',
-    description: 'Day 1 to 90 schedule: upload frequency, reviewing metrics, content iteration, and milestone tracking.',
-    durationMinutes: 27,
-    videoType: 'awaiting_upload',
-    isPublished: true,
-    isFreePreview: false
-  },
-  {
-    id: 'lesson-14',
-    order: 14,
-    title: 'YouTube Ke Zaroori Tips Aur Tricks',
-    englishSubtitle: 'Essential YouTube Tips, Tricks & Safety Rules',
-    description: 'Preventing copyright claims, community guidelines safety, two-step verification, and creator burnout prevention.',
-    durationMinutes: 25,
-    videoType: 'awaiting_upload',
-    isPublished: true,
-    isFreePreview: false
-  }
+  ...Array.from({ length: 4 }, (_, idx): Lesson => {
+    const num = idx + 2;
+    return {
+      id: `episode-${String(num).padStart(2, '0')}`,
+      order: num,
+      title: `Episode ${num}`,
+      englishSubtitle: '',
+      description: '',
+      durationMinutes: 0,
+      videoUrl: '',
+      videoType: 'awaiting_upload',
+      isPublished: true,
+      isFreePreview: false
+    };
+  })
 ];
+
+function isLegacyUntouched14Lessons(lessons: unknown): boolean {
+  if (!Array.isArray(lessons) || lessons.length !== 14) return false;
+  return lessons.every(
+    (l: any) => typeof l?.id === 'string' && l.id.startsWith('lesson-') && !l.videoUrl
+  );
+}
+
+function isLegacyHindi12Episodes(lessons: unknown): boolean {
+  if (!Array.isArray(lessons) || lessons.length !== 12) return false;
+  return (
+    lessons[0]?.id === 'episode-01' &&
+    lessons.slice(1).every((l: any) => typeof l?.id === 'string' && l.id.startsWith('episode-') && !l.videoUrl)
+  );
+}
 
 function loadDatabase(): DatabaseSchema {
   try {
     if (fs.existsSync(DB_FILE)) {
       const data = fs.readFileSync(DB_FILE, 'utf-8');
       const parsed = JSON.parse(data);
-      return {
-        course: parsed.course || DEFAULT_COURSE,
-        lessons: parsed.lessons || DEFAULT_LESSONS,
+      const course: Course = parsed.course || DEFAULT_COURSE;
+      let lessons: Lesson[] = parsed.lessons || DEFAULT_LESSONS;
+      let migrated = false;
+
+      if (isLegacyUntouched14Lessons(lessons) || isLegacyHindi12Episodes(lessons)) {
+        lessons = DEFAULT_LESSONS;
+        course.totalLessons = DEFAULT_LESSONS.length;
+        if (
+          Array.isArray(course.features) &&
+          course.features.length > 0 &&
+          (course.features[0].startsWith('14 ') || course.features[0].startsWith('12 '))
+        ) {
+          course.features[0] = '5 Step-by-Step Video Episodes';
+        }
+        migrated = true;
+      }
+
+      const loaded: DatabaseSchema = {
+        course,
+        lessons,
         students: parsed.students || [],
         payments: parsed.payments || [],
         auditLogs: parsed.auditLogs || [],
@@ -243,6 +148,11 @@ function loadDatabase(): DatabaseSchema {
         otps: parsed.otps || {},
         apkDownloadUrl: parsed.apkDownloadUrl || ''
       };
+
+      if (migrated) {
+        saveDatabase(loaded);
+      }
+      return loaded;
     }
   } catch (err) {
     console.error('Error reading db.json, initializing fresh schema', err);
@@ -260,7 +170,7 @@ function loadDatabase(): DatabaseSchema {
         adminPhone: 'system',
         targetId: 'course-yt-01',
         targetType: 'course',
-        details: 'KP HUBE Complete YouTube Course initialized with 14 Roman Hindi lessons.',
+        details: 'KP HUBE Complete YouTube Course initialized with 5 video episodes.',
         timestamp: new Date().toISOString()
       }
     ],
@@ -641,14 +551,19 @@ app.post('/api/payment/verify', (req, res) => {
 
   const { orderId, paymentId, utrNumber, signature } = req.body;
 
-  const refId = paymentId || utrNumber;
-  if (!orderId || !refId) {
-    return res.status(400).json({ error: 'Order ID and Transaction Reference / UTR Number are required.' });
+  const refId = String(paymentId || utrNumber || '').trim();
+  if (!orderId || refId.length < 8) {
+    return res.status(400).json({ error: 'Valid Order ID and UTR / Transaction Reference Number (minimum 8 characters) are required.' });
   }
 
   const paymentRecord = db.payments.find(p => p.orderId === orderId);
   if (!paymentRecord) {
     return res.status(404).json({ error: 'Payment order record not found.' });
+  }
+
+  const studentIdentifiers = new Set([student.id, student.phone, student.email].filter(Boolean));
+  if (!studentIdentifiers.has(paymentRecord.studentPhone)) {
+    return res.status(403).json({ error: 'Unauthorized: Payment order belongs to a different account.' });
   }
 
   if (paymentRecord.status === 'paid') {
@@ -861,12 +776,12 @@ app.put('/api/admin/course', requireAdmin, (req, res) => {
 // Admin - Add lesson
 app.post('/api/admin/lessons', requireAdmin, (req, res) => {
   const newLesson: Lesson = {
-    id: `lesson-${Date.now()}`,
+    id: `episode-${Date.now()}`,
     order: db.lessons.length + 1,
-    title: req.body.title || 'Naya Lesson',
+    title: req.body.title || `Episode ${db.lessons.length + 1}`,
     englishSubtitle: req.body.englishSubtitle || '',
     description: req.body.description || '',
-    durationMinutes: Number(req.body.durationMinutes) || 15,
+    durationMinutes: Number(req.body.durationMinutes) || 0,
     videoUrl: req.body.videoUrl || '',
     videoType: req.body.videoUrl ? (req.body.videoType || 'youtube') : 'awaiting_upload',
     pdfUrl: req.body.pdfUrl || '',
@@ -901,10 +816,21 @@ app.put('/api/admin/lessons/:id', requireAdmin, (req, res) => {
   }
 
   const existing = db.lessons[index];
+  const cleanVideoUrl =
+    req.body.videoUrl !== undefined ? String(req.body.videoUrl).trim() : (existing.videoUrl || '');
+  const resolvedVideoType = cleanVideoUrl
+    ? req.body.videoType && req.body.videoType !== 'awaiting_upload'
+      ? req.body.videoType
+      : existing.videoType !== 'awaiting_upload'
+        ? existing.videoType
+        : 'youtube'
+    : 'awaiting_upload';
+
   const updated: Lesson = {
     ...existing,
     ...req.body,
-    videoType: req.body.videoUrl ? (req.body.videoType || 'youtube') : (existing.videoUrl ? existing.videoType : 'awaiting_upload')
+    videoUrl: cleanVideoUrl,
+    videoType: resolvedVideoType
   };
 
   db.lessons[index] = updated;
