@@ -42,6 +42,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
   const [actionType, setActionType] = useState<'grant' | 'revoke' | null>(null);
   const [courseForm, setCourseForm] = useState<Partial<Course>>({});
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  const [backupStatusMsg, setBackupStatusMsg] = useState<string | null>(null);
+  const [apkUrlInput, setApkUrlInput] = useState('');
+  const [hasUploadedApk, setHasUploadedApk] = useState(false);
+  const [uploadedApkSize, setUploadedApkSize] = useState(0);
+  const [apkStatusMsg, setApkStatusMsg] = useState<string | null>(null);
+  const [apkSaving, setApkSaving] = useState(false);
 
   // Check login
   const handleAdminLogin = async (e: React.FormEvent) => {
@@ -68,14 +74,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
   const fetchAdminData = async () => {
     setLoadingData(true);
     try {
-      const [ov, std, pay, crs, lsn, aud, sup] = await Promise.all([
+      const [ov, std, pay, crs, lsn, aud, sup, apkCfg] = await Promise.all([
         api.getAdminOverview(),
         api.getAdminStudents(),
         api.getAdminPayments(),
         api.getCourse(),
         api.getLessons(),
         api.getAuditLogs(),
-        api.getSupportTickets()
+        api.getSupportTickets(),
+        api.getAdminApkConfig()
       ]);
       setOverview(ov);
       setStudents(std.students);
@@ -85,6 +92,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
       setLessons(lsn.lessons);
       setAuditLogs(aud.logs);
       setSupportTickets(sup.tickets);
+      setApkUrlInput(apkCfg.apkDownloadUrl || '');
+      setHasUploadedApk(apkCfg.hasUploadedApk);
+      setUploadedApkSize(apkCfg.uploadedApkSize || 0);
     } catch (err) {
       console.error('Failed to load admin data', err);
       // If token expired
@@ -189,6 +199,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
       onRefreshData();
     } catch (err: any) {
       alert(err.message || 'Failed to update course');
+    }
+  };
+
+  // Export Full JSON Backup
+  const handleExportBackup = async () => {
+    try {
+      const backup = await api.exportBackup();
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `kphube-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setBackupStatusMsg('Full JSON backup downloaded successfully.');
+      setTimeout(() => setBackupStatusMsg(null), 4000);
+    } catch (err: any) {
+      alert(err.message || 'Failed to export backup');
+    }
+  };
+
+  // Restore Full JSON Backup
+  const handleRestoreBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const json = JSON.parse(text);
+      const res = await api.restoreBackup(json);
+      setBackupStatusMsg(res.message);
+      fetchAdminData();
+      onRefreshData();
+      setTimeout(() => setBackupStatusMsg(null), 5000);
+    } catch (err: any) {
+      alert(err.message || 'Invalid backup file');
+    } finally {
+      e.target.value = '';
     }
   };
 
@@ -362,7 +409,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
               <span className="font-brand font-black text-2xl text-slate-800 mt-1 block">
                 {overview.totalStudents}
               </span>
-              <span className="text-[10px] text-slate-500">OTP Verified Accounts</span>
+              <span className="text-[10px] text-slate-500">Saved Student Accounts</span>
             </div>
 
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
@@ -408,7 +455,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
                     <div key={ticket.id} className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs flex justify-between items-center">
                       <div>
                         <span className="font-bold text-slate-800 block">{ticket.subject}</span>
-                        <span className="text-[10px] text-slate-500">+91 {ticket.studentPhone} • {ticket.studentName}</span>
+                        <span className="text-[10px] text-slate-500">
+                          {ticket.studentPhone?.includes('@') ? ticket.studentPhone : `+91 ${ticket.studentPhone}`} • {ticket.studentName}
+                        </span>
                       </div>
                       <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">
                         {ticket.status}
@@ -725,7 +774,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
                   {actionType === 'grant' ? 'Grant Course Access' : 'Revoke Course Access'}
                 </h3>
                 <p className="text-slate-600">
-                  Target Student: <strong>+91 {selectedStudentForAction.phone}</strong> ({selectedStudentForAction.name || 'Unnamed'})
+                  Target Student: <strong>{selectedStudentForAction.email || (selectedStudentForAction.phone ? `+91 ${selectedStudentForAction.phone}` : selectedStudentForAction.id)}</strong> ({selectedStudentForAction.name || 'Unnamed'})
                 </p>
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
@@ -777,7 +826,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
                   <tr key={s.id} className="hover:bg-slate-50">
                     <td className="py-3 px-3">
                       <div className="font-semibold text-slate-900">{s.name || 'Student Creator'}</div>
-                      <div className="font-mono text-slate-500 text-[11px]">+91 {s.phone}</div>
+                      <div className="font-mono text-slate-500 text-[11px]">
+                        {s.email || (s.phone ? `+91 ${s.phone}` : s.id)}
+                      </div>
                     </td>
                     <td className="py-3 px-3">
                       {s.isEnrolled ? (
@@ -850,7 +901,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
                       {p.status.toUpperCase()}
                     </span>
                     <span className="text-slate-400">·</span>
-                    <span className="font-mono text-slate-600">+91 {p.studentPhone}</span>
+                    <span className="font-mono text-slate-600">
+                      {p.studentPhone?.includes('@') ? p.studentPhone : `+91 ${p.studentPhone}`}
+                    </span>
                   </div>
                   <div className="text-[11px] text-slate-500 font-mono mt-0.5">
                     Order: {p.orderId} {p.paymentId ? `| Gateway Ref: ${p.paymentId}` : ''}
@@ -998,6 +1051,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
               <span>Save Course Settings</span>
             </button>
           </form>
+
+          {/* Database Backup & Restore */}
+          <div className="pt-5 border-t border-slate-200 space-y-3">
+            <div>
+              <h3 className="font-brand font-bold text-sm text-slate-900">Data Backup & Restore (.JSON)</h3>
+              <p className="text-[11px] text-slate-500">
+                Download a complete snapshot of your course, lessons, students, and payments, or restore from a previous backup anytime.
+              </p>
+            </div>
+            {backupStatusMsg && (
+              <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800">
+                {backupStatusMsg}
+              </div>
+            )}
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={handleExportBackup}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl transition-colors"
+              >
+                Download Backup (.JSON)
+              </button>
+              <label className="px-4 py-2 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 text-xs font-semibold rounded-xl cursor-pointer transition-colors">
+                <span>Restore from Backup (.JSON)</span>
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={handleRestoreBackup}
+                  className="hidden"
+                />
+              </label>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1026,22 +1112,149 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
             </div>
           </div>
 
-          {/* 1-Click Project Download */}
+          {/* 1. Publish Public .APK File or URL (What visitors download) */}
+          <div className="p-5 bg-indigo-50/70 border border-indigo-200 rounded-2xl space-y-4 text-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <span className="font-bold text-indigo-950 text-sm block">Public APK Release (Visitors Download .APK Only)</span>
+                <p className="text-[11px] text-indigo-800 mt-0.5">
+                  Upload your compiled <code>app-debug.apk</code> / <code>app-release.apk</code> OR paste your GitHub Release direct <code>.apk</code> link. Only when set will visitors see the <strong>Download APK</strong> button.
+                </p>
+              </div>
+              <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold shrink-0 ${
+                hasUploadedApk || apkUrlInput
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : 'bg-amber-100 text-amber-800'
+              }`}>
+                {hasUploadedApk
+                  ? `APK Uploaded (${(uploadedApkSize / (1024 * 1024)).toFixed(2)} MB)`
+                  : apkUrlInput
+                    ? 'External APK Link Active'
+                    : 'No APK Published Yet'}
+              </span>
+            </div>
+
+            {apkStatusMsg && (
+              <div className="p-2.5 bg-white border border-indigo-200 rounded-xl text-indigo-900 font-medium">
+                {apkStatusMsg}
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="px-4 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-bold text-xs cursor-pointer transition-all shadow-sm">
+                <span>{apkSaving ? 'Uploading...' : 'Upload .APK File'}</span>
+                <input
+                  type="file"
+                  accept=".apk,application/vnd.android.package-archive"
+                  disabled={apkSaving}
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setApkSaving(true);
+                    setApkStatusMsg(null);
+                    try {
+                      const reader = new FileReader();
+                      const base64: string = await new Promise((resolve, reject) => {
+                        reader.onload = () => resolve(String(reader.result || ''));
+                        reader.onerror = () => reject(new Error('Failed to read APK file'));
+                        reader.readAsDataURL(file);
+                      });
+                      const res = await api.uploadAdminApk(file.name, base64);
+                      setHasUploadedApk(true);
+                      setUploadedApkSize(res.size);
+                      setApkStatusMsg('APK uploaded privately & published for visitors (KP-HUBE.apk).');
+                      onRefreshData();
+                    } catch (err: any) {
+                      setApkStatusMsg(err.message || 'APK upload failed');
+                    } finally {
+                      setApkSaving(false);
+                      e.target.value = '';
+                    }
+                  }}
+                />
+              </label>
+
+              {hasUploadedApk && (
+                <button
+                  type="button"
+                  disabled={apkSaving}
+                  onClick={async () => {
+                    setApkSaving(true);
+                    try {
+                      await api.deleteAdminApk();
+                      setHasUploadedApk(false);
+                      setUploadedApkSize(0);
+                      setApkStatusMsg('Uploaded APK removed.');
+                      onRefreshData();
+                    } finally {
+                      setApkSaving(false);
+                    }
+                  }}
+                  className="px-3.5 py-2 rounded-xl border border-rose-300 text-rose-700 hover:bg-rose-50 font-semibold text-xs"
+                >
+                  Remove Uploaded APK
+                </button>
+              )}
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setApkSaving(true);
+                setApkStatusMsg(null);
+                try {
+                  const res = await api.updateAdminApkUrl(apkUrlInput.trim());
+                  setApkUrlInput(res.apkDownloadUrl);
+                  setApkStatusMsg(res.apkDownloadUrl ? 'External APK download URL saved.' : 'External APK URL cleared.');
+                  onRefreshData();
+                } catch (err: any) {
+                  setApkStatusMsg(err.message || 'Failed to save URL');
+                } finally {
+                  setApkSaving(false);
+                }
+              }}
+              className="flex flex-col sm:flex-row gap-2 pt-1"
+            >
+              <input
+                type="url"
+                value={apkUrlInput}
+                onChange={(e) => setApkUrlInput(e.target.value)}
+                placeholder="https://github.com/your-user/your-repo/releases/latest/download/app-debug.apk"
+                className="flex-1 px-3 py-2 rounded-xl border border-indigo-200 bg-white focus:border-indigo-500 focus:outline-none font-mono text-[11px]"
+              />
+              <button
+                type="submit"
+                disabled={apkSaving}
+                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs shrink-0"
+              >
+                Save APK Link
+              </button>
+            </form>
+          </div>
+
+          {/* 2. Private Owner-Only Android Project ZIP Download */}
           <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
             <div>
-              <span className="font-bold text-emerald-950 text-sm block">1-Click Download Android Project:</span>
+              <span className="font-bold text-emerald-950 text-sm block">Private Owner Archive: Android Project (.ZIP)</span>
               <p className="text-[11px] text-emerald-800 mt-0.5">
-                Download the complete pre-configured Android Studio project (.ZIP) containing all source code, assets, and Gradle build files.
+                Protected by your Admin key — completely hidden from public users. Only you can download the source project ZIP.
               </p>
             </div>
-            <a
-              href="/kphube-android-project.zip"
-              download="kphube-android-project.zip"
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await api.downloadPrivateAndroidProjectZip();
+                } catch (err: any) {
+                  setApkStatusMsg(err.message || 'Failed to download private ZIP.');
+                }
+              }}
               className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs flex items-center gap-2 shadow-md shrink-0 transition-all"
             >
               <Smartphone className="w-4 h-4" />
-              <span>Download Project (.ZIP)</span>
-            </a>
+              <span>Download Private Project (.ZIP)</span>
+            </button>
           </div>
 
           {/* Step by Step Execution Instructions */}

@@ -70,7 +70,9 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ isOpen, onClose, pay
             <div>
               <span className="text-slate-400 font-medium">Billed To Student:</span>
               <p className="font-semibold text-slate-800 mt-0.5">{payment.studentName || 'Creator Student'}</p>
-              <p className="font-mono text-slate-600">+91 {payment.studentPhone}</p>
+              <p className="font-mono text-slate-600">
+                {payment.studentPhone?.includes('@') ? payment.studentPhone : `+91 ${payment.studentPhone}`}
+              </p>
             </div>
             <div className="text-right">
               <span className="text-slate-400 font-medium">Transaction Date:</span>

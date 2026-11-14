@@ -17,23 +17,34 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 app.use(cors());
 app.use(express.json());
 
-// Path to persistent data storage
+// Path to persistent data storage & private owner files
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
+const PRIVATE_DIR = path.resolve(process.cwd(), 'private');
+const PRIVATE_ZIP_FILE = path.join(PRIVATE_DIR, 'kphube-android-project.zip');
+const PRIVATE_APK_FILE = path.join(PRIVATE_DIR, 'kphube-app.apk');
 
-// Ensure data directory exists
+// Ensure data & private directories exist
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+if (!fs.existsSync(PRIVATE_DIR)) {
+  fs.mkdirSync(PRIVATE_DIR, { recursive: true });
+}
+
+interface StoredStudent extends Student {
+  passwordHash?: string;
 }
 
 interface DatabaseSchema {
   course: Course;
   lessons: Lesson[];
-  students: Student[];
+  students: StoredStudent[];
   payments: PaymentRecord[];
   auditLogs: AuditLog[];
   supportTickets: SupportTicket[];
   otps: Record<string, { code: string; expiresAt: number }>;
+  apkDownloadUrl?: string;
 }
 
 const DEFAULT_COURSE: Course = {
@@ -229,7 +240,8 @@ function loadDatabase(): DatabaseSchema {
         payments: parsed.payments || [],
         auditLogs: parsed.auditLogs || [],
         supportTickets: parsed.supportTickets || [],
-        otps: parsed.otps || {}
+        otps: parsed.otps || {},
+        apkDownloadUrl: parsed.apkDownloadUrl || ''
       };
     }
   } catch (err) {
@@ -253,7 +265,8 @@ function loadDatabase(): DatabaseSchema {
       }
     ],
     supportTickets: [],
-    otps: {}
+    otps: {},
+    apkDownloadUrl: ''
   };
   saveDatabase(initialDb);
   return initialDb;
@@ -269,18 +282,50 @@ function saveDatabase(data: DatabaseSchema) {
 
 let db = loadDatabase();
 
-// Admin Secret Key from env
+// Admin Secret Key & Owner Email from env
 const ADMIN_SECRET = process.env.ADMIN_SECRET_KEY || 'kphube_admin_2026_secret';
+const OWNER_EMAIL = (process.env.OWNER_EMAIL || 'kpattitudeshort@gmail.com').trim().toLowerCase();
 const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || '';
 const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || 'kphube_mock_secret_key_2026';
 const UPI_MERCHANT_VPA = process.env.UPI_MERCHANT_VPA || 'kailash100k@axl';
 const UPI_MERCHANT_NAME = process.env.UPI_MERCHANT_NAME || 'KP HUBE';
 
+// Password Hashing Helpers (Node scrypt + per-user random salt)
+function hashPassword(password: string): string {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const derived = crypto.scryptSync(password, salt, 64).toString('hex');
+  return `${salt}:${derived}`;
+}
+
+function verifyPassword(password: string, storedHash?: string): boolean {
+  if (!storedHash || !storedHash.includes(':')) return false;
+  const [salt, keyHex] = storedHash.split(':');
+  const keyBuf = Buffer.from(keyHex, 'hex');
+  const derivedBuf = crypto.scryptSync(password, salt, 64);
+  if (keyBuf.length !== derivedBuf.length) return false;
+  return crypto.timingSafeEqual(keyBuf, derivedBuf);
+}
+
+function sanitizeStudent(student: StoredStudent): Student {
+  const { passwordHash: _ignored, ...safeStudent } = student;
+  return {
+    ...safeStudent,
+    isOwner: Boolean(student.email && student.email.toLowerCase() === OWNER_EMAIL)
+  };
+}
+
+function getStudentContactLabel(student: Student): string {
+  if (student.phone && student.email) return `+91 ${student.phone} (${student.email})`;
+  if (student.phone) return `+91 ${student.phone}`;
+  return student.email || student.id;
+}
+
 // Session helper for students
-function getStudentFromReq(req: Request): Student | null {
+function getStudentFromReq(req: Request): StoredStudent | null {
   const token = req.headers['authorization']?.replace('Bearer ', '') || (req.headers['x-student-phone'] as string);
   if (!token) return null;
-  return db.students.find(s => s.phone === token || s.id === token) || null;
+  const lower = token.toLowerCase();
+  return db.students.find(s => s.id === token || s.phone === token || (s.email && s.email.toLowerCase() === lower)) || null;
 }
 
 // Admin RBAC middleware
@@ -293,79 +338,114 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-// ==================== AUTH ROUTES ====================
+// ==================== AUTH ROUTES (NO OTP — EMAIL/PHONE + PASSWORD) ====================
 
-// Send Indian mobile OTP
-app.post('/api/auth/send-otp', (req, res) => {
-  const { phone } = req.body;
-  if (!phone || !/^[6-9]\d{9}$/.test(phone)) {
-    return res.status(400).json({ error: 'Please enter a valid 10-digit Indian mobile number.' });
-  }
+// Create Student Account (Gmail/Email or Mobile Number + Password)
+app.post('/api/auth/register', (req, res) => {
+  const { identifier, email, phone, password, name } = req.body;
 
-  // Generate 6-digit OTP
-  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes
+  const rawId = String(identifier || '').trim();
+  let cleanEmail = String(email || '').trim().toLowerCase();
+  let cleanPhone = String(phone || '').replace(/\D/g, '');
 
-  db.otps[phone] = { code: otpCode, expiresAt };
-  saveDatabase(db);
-
-  console.log(`[KP HUBE AUTH] OTP for +91 ${phone}: ${otpCode}`);
-
-  return res.json({
-    success: true,
-    message: `OTP sent successfully to +91 ${phone}`,
-    // In development/test mode, we provide the code in response to facilitate immediate testing,
-    // while noting SMS gateway requirements for production
-    devCode: process.env.NODE_ENV === 'production' ? undefined : otpCode,
-    expiresInSeconds: 300
-  });
-});
-
-// Verify OTP
-app.post('/api/auth/verify-otp', (req, res) => {
-  const { phone, code, name } = req.body;
-  if (!phone || !code) {
-    return res.status(400).json({ error: 'Mobile number and OTP code are required.' });
-  }
-
-  const record = db.otps[phone];
-  // Allow test OTP '123456' for rapid evaluation or actual generated code
-  const isValid = (record && record.code === code && record.expiresAt > Date.now()) || code === '123456';
-
-  if (!isValid) {
-    return res.status(400).json({ error: 'Invalid or expired OTP. Please try again.' });
-  }
-
-  // Remove used OTP
-  delete db.otps[phone];
-
-  // Find or create student
-  let student = db.students.find(s => s.phone === phone);
-  if (!student) {
-    student = {
-      id: `student_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-      phone,
-      name: name?.trim() || `Creator ${phone.slice(-4)}`,
-      isEnrolled: false,
-      role: 'student',
-      lastLoginAt: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-      completedLessonIds: []
-    };
-    db.students.push(student);
-  } else {
-    student.lastLoginAt = new Date().toISOString();
-    if (name && !student.name) {
-      student.name = name.trim();
+  if (rawId) {
+    if (rawId.includes('@')) {
+      cleanEmail = cleanEmail || rawId.toLowerCase();
+    } else {
+      cleanPhone = cleanPhone || rawId.replace(/\D/g, '');
     }
   }
 
+  if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+    return res.status(400).json({ error: 'Please enter a valid Gmail / Email address.' });
+  }
+  if (cleanPhone && !/^[6-9]\d{9}$/.test(cleanPhone)) {
+    return res.status(400).json({ error: 'Please enter a valid 10-digit Indian mobile number.' });
+  }
+  if (!cleanEmail && !cleanPhone) {
+    return res.status(400).json({ error: 'Please enter your Gmail / Email or 10-digit mobile number.' });
+  }
+
+  const rawPassword = String(password || '');
+  if (rawPassword.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters long.' });
+  }
+
+  const existing = db.students.find(s =>
+    (cleanEmail && s.email && s.email.toLowerCase() === cleanEmail) ||
+    (cleanPhone && s.phone === cleanPhone)
+  );
+  if (existing) {
+    return res.status(409).json({ error: 'Account already exists with this Email or Mobile Number. Please Sign In.' });
+  }
+
+  const fallbackName = cleanEmail
+    ? cleanEmail.split('@')[0]
+    : `Creator ${cleanPhone.slice(-4)}`;
+
+  const newStudent: StoredStudent = {
+    id: `student_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+    email: cleanEmail || undefined,
+    phone: cleanPhone || undefined,
+    name: String(name || '').trim() || fallbackName,
+    passwordHash: hashPassword(rawPassword),
+    isEnrolled: false,
+    role: 'student',
+    lastLoginAt: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    completedLessonIds: []
+  };
+
+  db.students.push(newStudent);
   saveDatabase(db);
 
   return res.json({
     success: true,
-    token: student.phone,
-    student
+    token: newStudent.id,
+    student: sanitizeStudent(newStudent)
+  });
+});
+
+// Sign In with Gmail/Email or Mobile Number + Password
+app.post('/api/auth/login', (req, res) => {
+  const { identifier, password } = req.body;
+  const rawId = String(identifier || '').trim();
+  const rawPassword = String(password || '');
+
+  if (!rawId || !rawPassword) {
+    return res.status(400).json({ error: 'Email/Mobile number and password are required.' });
+  }
+
+  const isEmail = rawId.includes('@');
+  const cleanEmail = isEmail ? rawId.toLowerCase() : '';
+  const cleanPhone = !isEmail ? rawId.replace(/\D/g, '') : '';
+
+  const student = db.students.find(s =>
+    (cleanEmail && s.email && s.email.toLowerCase() === cleanEmail) ||
+    (cleanPhone && s.phone === cleanPhone)
+  );
+
+  if (!student) {
+    return res.status(401).json({ error: 'No account found with this Email or Mobile number. Please create a new account.' });
+  }
+
+  if (!student.passwordHash) {
+    // Legacy account created before passwords were enabled — allow setting password on first login
+    if (rawPassword.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters long.' });
+    }
+    student.passwordHash = hashPassword(rawPassword);
+  } else if (!verifyPassword(rawPassword, student.passwordHash)) {
+    return res.status(401).json({ error: 'Incorrect password. Please try again.' });
+  }
+
+  student.lastLoginAt = new Date().toISOString();
+  saveDatabase(db);
+
+  return res.json({
+    success: true,
+    token: student.id,
+    student: sanitizeStudent(student)
   });
 });
 
@@ -375,7 +455,7 @@ app.get('/api/auth/me', (req, res) => {
   if (!student) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
-  return res.json({ student });
+  return res.json({ student: sanitizeStudent(student) });
 });
 
 // Update Profile
@@ -389,7 +469,7 @@ app.post('/api/auth/profile', (req, res) => {
     student.name = name.trim();
     saveDatabase(db);
   }
-  return res.json({ success: true, student });
+  return res.json({ success: true, student: sanitizeStudent(student) });
 });
 
 // Student Account Deletion Request
@@ -400,13 +480,14 @@ app.post('/api/auth/delete-account', (req, res) => {
   }
 
   // Record audit log
+  const contactLabel = getStudentContactLabel(student);
   db.auditLogs.push({
     id: `log_del_${Date.now()}`,
     action: 'STUDENT_ACCOUNT_DELETED',
-    adminPhone: student.phone,
+    adminPhone: student.phone || student.email || student.id,
     targetId: student.id,
     targetType: 'student',
-    details: `Student requested account deletion for +91 ${student.phone}`,
+    details: `Student requested account deletion for ${contactLabel}`,
     timestamp: new Date().toISOString()
   });
 
@@ -459,7 +540,7 @@ app.get('/api/lessons', (req, res) => {
   res.json({
     lessons: sanitizedLessons,
     isEnrolled,
-    studentPhone: student?.phone
+    studentPhone: student?.phone || student?.email
   });
 });
 
@@ -496,6 +577,7 @@ app.get('/api/payment/upi-status', (_req, res) => {
     courseAmount: db.course.price,
     hasLiveGatewayKeys: Boolean(RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET && RAZORPAY_KEY_ID !== 'rzp_test_YourKeyIdHere'),
     razorpayKeyId: RAZORPAY_KEY_ID || 'rzp_test_demo_kphube',
+    mismatchedQrBlocked: false,
     upiIntentUrl: `upi://pay?pa=${encodeURIComponent(UPI_MERCHANT_VPA)}&pn=${encodeURIComponent(UPI_MERCHANT_NAME)}&am=${db.course.price}&cu=INR&tn=${encodeURIComponent('KP HUBE Complete YouTube Course')}`
   });
 });
@@ -514,6 +596,7 @@ app.post('/api/payment/create-order', (req, res) => {
   const amountPaise = db.course.price * 100; // 499 * 100 = 49900 paise
   const orderId = `order_kphube_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
   const receiptNumber = `RCPT-${Date.now().toString().slice(-6)}`;
+  const studentContact = student.phone || student.email || student.id;
 
   const paymentRecord: PaymentRecord = {
     id: `pay_${Date.now()}_${crypto.randomBytes(2).toString('hex')}`,
@@ -522,7 +605,7 @@ app.post('/api/payment/create-order', (req, res) => {
     currency: 'INR',
     status: 'created',
     method: 'razorpay_upi',
-    studentPhone: student.phone,
+    studentPhone: studentContact,
     studentName: student.name,
     timestamp: new Date().toISOString(),
     receiptNumber,
@@ -541,7 +624,7 @@ app.post('/api/payment/create-order', (req, res) => {
     receiptNumber,
     key: RAZORPAY_KEY_ID || 'rzp_test_demo_kphube',
     courseTitle: db.course.title,
-    studentPhone: student.phone,
+    studentPhone: studentContact,
     studentName: student.name || 'Student',
     qrImageUrl: '/assets/payment_qr.jpeg',
     upiVpa: UPI_MERCHANT_VPA,
@@ -592,7 +675,7 @@ app.post('/api/payment/verify', (req, res) => {
     adminPhone: 'upi_gateway',
     targetId: student.id,
     targetType: 'payment',
-    details: `Payment of ₹${paymentRecord.amount} verified for student +91 ${student.phone} (Ref/UTR: ${refId})`,
+    details: `Payment of ₹${paymentRecord.amount} verified for student ${getStudentContactLabel(student)} (Ref/UTR: ${refId})`,
     timestamp: new Date().toISOString()
   });
 
@@ -614,8 +697,9 @@ app.get('/api/payment/history', (req, res) => {
     return res.status(401).json({ error: 'Authentication required' });
   }
 
+  const identifiers = new Set([student.id, student.phone, student.email].filter(Boolean));
   const studentPayments = db.payments
-    .filter(p => p.studentPhone === student.phone)
+    .filter(p => identifiers.has(p.studentPhone))
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
   res.json({ payments: studentPayments });
@@ -626,9 +710,9 @@ app.post('/api/support', (req, res) => {
   const student = getStudentFromReq(req);
   const { subject, message, phone, name } = req.body;
 
-  const contactPhone = student?.phone || phone;
+  const contactPhone = student ? (student.phone || student.email || student.id) : phone;
   if (!contactPhone || !message) {
-    return res.status(400).json({ error: 'Contact number and message are required.' });
+    return res.status(400).json({ error: 'Contact info and message are required.' });
   }
 
   const ticket: SupportTicket = {
@@ -684,10 +768,13 @@ app.get('/api/admin/overview', requireAdmin, (_req, res) => {
 
 // Admin - Get all registered students
 app.get('/api/admin/students', requireAdmin, (_req, res) => {
-  const list = db.students.map(s => ({
-    ...s,
-    purchaseRecord: db.payments.find(p => p.studentPhone === s.phone && p.status === 'paid')
-  }));
+  const list = db.students.map(s => {
+    const ids = new Set([s.id, s.phone, s.email].filter(Boolean));
+    return {
+      ...sanitizeStudent(s),
+      purchaseRecord: db.payments.find(p => ids.has(p.studentPhone) && p.status === 'paid')
+    };
+  });
   res.json({ students: list });
 });
 
@@ -696,7 +783,7 @@ app.post('/api/admin/students/:id/grant', requireAdmin, (req, res) => {
   const { id } = req.params;
   const { reason } = req.body;
 
-  const student = db.students.find(s => s.id === id || s.phone === id);
+  const student = db.students.find(s => s.id === id || s.phone === id || s.email === id);
   if (!student) {
     return res.status(404).json({ error: 'Student not found.' });
   }
@@ -711,12 +798,12 @@ app.post('/api/admin/students/:id/grant', requireAdmin, (req, res) => {
     adminPhone: 'owner',
     targetId: student.id,
     targetType: 'student',
-    details: `Owner manually granted access to +91 ${student.phone}. Note: ${reason || 'VIP / Offline enrollment'}`,
+    details: `Owner manually granted access to ${getStudentContactLabel(student)}. Note: ${reason || 'VIP / Offline enrollment'}`,
     timestamp: new Date().toISOString()
   });
 
   saveDatabase(db);
-  res.json({ success: true, student });
+  res.json({ success: true, student: sanitizeStudent(student) });
 });
 
 // Admin - Revoke access manually
@@ -724,7 +811,7 @@ app.post('/api/admin/students/:id/revoke', requireAdmin, (req, res) => {
   const { id } = req.params;
   const { reason } = req.body;
 
-  const student = db.students.find(s => s.id === id || s.phone === id);
+  const student = db.students.find(s => s.id === id || s.phone === id || s.email === id);
   if (!student) {
     return res.status(404).json({ error: 'Student not found.' });
   }
@@ -737,12 +824,12 @@ app.post('/api/admin/students/:id/revoke', requireAdmin, (req, res) => {
     adminPhone: 'owner',
     targetId: student.id,
     targetType: 'student',
-    details: `Owner revoked course access for +91 ${student.phone}. Reason: ${reason || 'Refund / Policy violation'}`,
+    details: `Owner revoked course access for ${getStudentContactLabel(student)}. Reason: ${reason || 'Refund / Policy violation'}`,
     timestamp: new Date().toISOString()
   });
 
   saveDatabase(db);
-  res.json({ success: true, student });
+  res.json({ success: true, student: sanitizeStudent(student) });
 });
 
 // Admin - Get all transactions
@@ -918,12 +1005,259 @@ app.post('/api/admin/support/:id/resolve', requireAdmin, (req, res) => {
   res.json({ success: true });
 });
 
+// ==================== PUBLIC APK DOWNLOAD ROUTES (ONLY .APK) ====================
+
+function getEffectiveApkUrl(): string {
+  return (db.apkDownloadUrl || process.env.APK_DOWNLOAD_URL || '').trim();
+}
+
+app.get('/api/apk/status', (_req, res) => {
+  const hasUploadedApk = fs.existsSync(PRIVATE_APK_FILE);
+  const externalUrl = getEffectiveApkUrl();
+  const available = hasUploadedApk || Boolean(externalUrl);
+  res.json({
+    available,
+    filename: 'KP-HUBE.apk',
+    downloadUrl: available ? '/api/apk/download' : null,
+    source: hasUploadedApk ? 'uploaded' : externalUrl ? 'external' : 'none'
+  });
+});
+
+app.get('/api/apk/download', (_req, res) => {
+  if (fs.existsSync(PRIVATE_APK_FILE)) {
+    res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+    res.setHeader('Content-Disposition', 'attachment; filename="KP-HUBE.apk"');
+    return res.sendFile(PRIVATE_APK_FILE);
+  }
+  const externalUrl = getEffectiveApkUrl();
+  if (externalUrl) {
+    return res.redirect(externalUrl);
+  }
+  return res.status(404).json({
+    error: 'Official APK is not published yet. Please use Install App in your browser.'
+  });
+});
+
+// ==================== PRIVATE ADMIN ANDROID PROJECT & APK MANAGEMENT ====================
+
+app.get('/api/admin/android-project', requireAdmin, (_req, res) => {
+  if (!fs.existsSync(PRIVATE_ZIP_FILE)) {
+    return res.status(404).json({ error: 'Private Android project archive not found.' });
+  }
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', 'attachment; filename="kphube-android-project.zip"');
+  return res.sendFile(PRIVATE_ZIP_FILE);
+});
+
+app.get('/api/admin/apk-config', requireAdmin, (_req, res) => {
+  const hasUploadedApk = fs.existsSync(PRIVATE_APK_FILE);
+  const uploadedApkSize = hasUploadedApk ? fs.statSync(PRIVATE_APK_FILE).size : 0;
+  res.json({
+    apkDownloadUrl: db.apkDownloadUrl || '',
+    hasUploadedApk,
+    uploadedApkSize
+  });
+});
+
+app.put('/api/admin/apk-config', requireAdmin, (req, res) => {
+  const rawUrl = String(req.body?.apkDownloadUrl || '').trim();
+  if (rawUrl && !/^https?:\/\/.+/i.test(rawUrl)) {
+    return res.status(400).json({ error: 'Please enter a valid http/https APK download URL.' });
+  }
+  db.apkDownloadUrl = rawUrl;
+  db.auditLogs.push({
+    id: `log_apk_url_${Date.now()}`,
+    action: 'APK_DOWNLOAD_URL_UPDATED',
+    adminPhone: 'owner',
+    targetId: 'apk',
+    targetType: 'course',
+    details: rawUrl ? 'Updated official APK download URL.' : 'Cleared external APK download URL.',
+    timestamp: new Date().toISOString()
+  });
+  saveDatabase(db);
+  return res.json({ success: true, apkDownloadUrl: db.apkDownloadUrl });
+});
+
+app.post('/api/admin/upload-apk', express.json({ limit: '50mb' }), requireAdmin, (req, res) => {
+  const { filename, base64 } = req.body as { filename?: string; base64?: string };
+  if (!base64 || !filename || !filename.toLowerCase().endsWith('.apk')) {
+    return res.status(400).json({ error: 'Please upload a valid .apk file.' });
+  }
+  const cleanBase64 = base64.includes(',') ? base64.split(',').pop() || '' : base64;
+  const buffer = Buffer.from(cleanBase64, 'base64');
+  // APK files are ZIP archives starting with magic bytes PK\x03\x04
+  if (buffer.length < 1024 || buffer[0] !== 0x50 || buffer[1] !== 0x4b) {
+    return res.status(400).json({ error: 'Invalid APK file format.' });
+  }
+  fs.writeFileSync(PRIVATE_APK_FILE, buffer);
+  db.auditLogs.push({
+    id: `log_apk_up_${Date.now()}`,
+    action: 'APK_FILE_UPLOADED',
+    adminPhone: 'owner',
+    targetId: 'apk',
+    targetType: 'course',
+    details: `Uploaded APK (${filename}, ${(buffer.length / (1024 * 1024)).toFixed(2)} MB).`,
+    timestamp: new Date().toISOString()
+  });
+  saveDatabase(db);
+  return res.json({ success: true, size: buffer.length });
+});
+
+app.delete('/api/admin/upload-apk', requireAdmin, (_req, res) => {
+  if (fs.existsSync(PRIVATE_APK_FILE)) {
+    fs.unlinkSync(PRIVATE_APK_FILE);
+  }
+  return res.json({ success: true });
+});
+
+// Admin - Export & Restore Full JSON Backup
+app.get('/api/admin/backup', requireAdmin, (_req, res) => {
+  res.json({
+    exportedAt: new Date().toISOString(),
+    app: 'KP HUBE',
+    data: {
+      course: db.course,
+      lessons: db.lessons,
+      students: db.students,
+      payments: db.payments,
+      auditLogs: db.auditLogs,
+      supportTickets: db.supportTickets,
+      apkDownloadUrl: db.apkDownloadUrl || ''
+    }
+  });
+});
+
+app.post('/api/admin/restore', requireAdmin, (req, res) => {
+  const payload = req.body?.data || req.body;
+  if (!payload || !payload.course || !Array.isArray(payload.lessons)) {
+    return res.status(400).json({ error: 'Invalid backup JSON structure. Missing course or lessons.' });
+  }
+
+  db = {
+    course: payload.course,
+    lessons: payload.lessons,
+    students: Array.isArray(payload.students) ? payload.students : [],
+    payments: Array.isArray(payload.payments) ? payload.payments : [],
+    auditLogs: Array.isArray(payload.auditLogs) ? payload.auditLogs : [],
+    supportTickets: Array.isArray(payload.supportTickets) ? payload.supportTickets : [],
+    otps: {},
+    apkDownloadUrl: typeof payload.apkDownloadUrl === 'string' ? payload.apkDownloadUrl : (db.apkDownloadUrl || '')
+  };
+
+  db.auditLogs.push({
+    id: `log_restore_${Date.now()}`,
+    action: 'DATABASE_RESTORED',
+    adminPhone: 'owner',
+    targetId: db.course.id,
+    targetType: 'course',
+    details: `Database restored from backup (${db.lessons.length} lessons, ${db.students.length} students, ${db.payments.length} payments).`,
+    timestamp: new Date().toISOString()
+  });
+
+  saveDatabase(db);
+  return res.json({
+    success: true,
+    message: `Restored ${db.lessons.length} lessons, ${db.students.length} students, and ${db.payments.length} payments.`
+  });
+});
+
 // ==================== VITE MIDDLEWARE / STATIC ASSETS ====================
 
 async function startServer() {
+  // Block direct access to private archives, database files, server code, and secrets
+  app.use((req, res, next) => {
+    const p = req.path.toLowerCase();
+    if (
+      p.startsWith('/private') ||
+      p.startsWith('/data') ||
+      p.startsWith('/android') ||
+      p.startsWith('/.github') ||
+      p.startsWith('/.git') ||
+      p.startsWith('/.env') ||
+      p === '/server.ts' ||
+      p === '/package.json' ||
+      p === '/bun.lock' ||
+      p === '/metadata.json' ||
+      p.endsWith('.zip') ||
+      p.endsWith('.keystore')
+    ) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    next();
+  });
+
   if (!IS_PROD) {
+    // Serve a WebSocket-free Vite client shim when HMR is disabled so the browser
+    // never throws "WebSocket closed without opened." behind the Cloud Run proxy.
+    app.get('/@vite/client', (_req, res) => {
+      res.type('application/javascript').send(`
+const sheetsMap = new Map();
+const linkSheetsMap = new Map();
+if (typeof document !== 'undefined') {
+  document.querySelectorAll('style[data-vite-dev-id]').forEach((el) => {
+    sheetsMap.set(el.getAttribute('data-vite-dev-id'), el);
+  });
+  document.querySelectorAll('link[rel="stylesheet"][data-vite-dev-id]').forEach((el) => {
+    linkSheetsMap.set(el.getAttribute('data-vite-dev-id'), el);
+  });
+}
+let lastInsertedStyle;
+export function updateStyle(id, content) {
+  if (linkSheetsMap.has(id)) return;
+  let style = sheetsMap.get(id);
+  if (!style) {
+    style = document.createElement('style');
+    style.setAttribute('type', 'text/css');
+    style.setAttribute('data-vite-dev-id', id);
+    style.textContent = content;
+    if (!lastInsertedStyle) {
+      document.head.appendChild(style);
+      setTimeout(() => { lastInsertedStyle = undefined; }, 0);
+    } else {
+      lastInsertedStyle.insertAdjacentElement('afterend', style);
+    }
+    lastInsertedStyle = style;
+  } else if (style.textContent !== content) {
+    style.textContent = content;
+  }
+  sheetsMap.set(id, style);
+}
+export function removeStyle(id) {
+  if (linkSheetsMap.has(id)) {
+    document.querySelectorAll('link[rel="stylesheet"][data-vite-dev-id="' + CSS.escape(id) + '"]').forEach((el) => el.remove());
+    linkSheetsMap.delete(id);
+  }
+  const style = sheetsMap.get(id);
+  if (style) {
+    style.remove();
+    sheetsMap.delete(id);
+  }
+}
+export function createHotContext() {
+  return {
+    data: {},
+    accept() {},
+    acceptExports() {},
+    dispose() {},
+    prune() {},
+    invalidate() {},
+    on() {},
+    off() {},
+    send() {},
+  };
+}
+export function injectQuery(url, queryToInject) {
+  if (url[0] !== '.' && url[0] !== '/') return url;
+  const pathname = url.replace(/[?#].*$/, '');
+  const { search, hash } = new URL(url, 'http://vite.dev');
+  return pathname + '?' + queryToInject + (search ? '&' + search.slice(1) : '') + (hash || '');
+}
+export class ErrorOverlay extends HTMLElement {}
+`);
+    });
+
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, hmr: false, ws: false },
       appType: 'spa'
     });
     app.use(vite.middlewares);
@@ -937,7 +1271,6 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[KP HUBE] Server listening on http://0.0.0.0:${PORT}`);
-    console.log(`[KP HUBE] Default Admin Key: ${ADMIN_SECRET}`);
     console.log(`[KP HUBE] Verified UPI VPA: ${UPI_MERCHANT_VPA} (${UPI_MERCHANT_NAME})`);
   });
 }

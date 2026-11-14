@@ -1,0 +1,44 @@
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+    repositories {
+        google()
+        mavenCentral()
+        flatDir {
+            dirs 'android/capacitor-cordova-android-plugins/src/main/libs', 'android/app/libs', 'capacitor-cordova-android-plugins/src/main/libs', 'app/libs'
+        }
+    }
+}
+
+rootProject.name = 'KP HUBE'
+
+include ':app'
+if (new File(settingsDir, 'android/app').exists()) {
+    project(':app').projectDir = new File(settingsDir, 'android/app')
+}
+
+include ':capacitor-android'
+if (new File(settingsDir, 'android/capacitor-android').exists()) {
+    project(':capacitor-android').projectDir = new File(settingsDir, 'android/capacitor-android')
+}
+
+include ':capacitor-splash-screen'
+if (new File(settingsDir, 'android/capacitor-splash-screen').exists()) {
+    project(':capacitor-splash-screen').projectDir = new File(settingsDir, 'android/capacitor-splash-screen')
+}
+
+include ':capacitor-status-bar'
+if (new File(settingsDir, 'android/capacitor-status-bar').exists()) {
+    project(':capacitor-status-bar').projectDir = new File(settingsDir, 'android/capacitor-status-bar')
+}
+
+include ':capacitor-cordova-android-plugins'
+if (new File(settingsDir, 'android/capacitor-cordova-android-plugins').exists()) {
+    project(':capacitor-cordova-android-plugins').projectDir = new File(settingsDir, 'android/capacitor-cordova-android-plugins')
+}

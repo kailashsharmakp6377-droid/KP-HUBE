@@ -31,7 +31,7 @@ export const CourseDetailsScreen: React.FC<CourseDetailsScreenProps> = ({
               alt={course.title}
               className="w-full h-full object-cover object-top"
               onError={(e) => {
-                e.currentTarget.src = '/public/assets/aistudio/WhatsApp_Image_2026-11-11_at_12.28.57_AM_c5373de0.jpeg';
+                e.currentTarget.src = '/assets/aistudio/WhatsApp_Image_2026-11-11_at_12.28.57_AM_c5373de0.jpeg';
               }}
             />
             <div className="absolute inset-0 bg-gradient-to-t from-purple-950/90 via-transparent to-transparent flex flex-col justify-end p-4 text-white">

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { 
   User, Smartphone, BookOpen, Receipt, HelpCircle, 
-  LogOut, Trash2, CheckCircle2, ChevronRight, Edit3, ShieldAlert
+  LogOut, Trash2, CheckCircle2, ChevronRight, Edit3, ShieldCheck
 } from 'lucide-react';
-import { api, storage } from '../services/api.ts';
+import { api } from '../services/api.ts';
 import type { Student, PaymentRecord } from '../types/index.ts';
 
 interface ProfileScreenProps {
@@ -15,6 +15,7 @@ interface ProfileScreenProps {
   onOpenAccountDeletion: () => void;
   onViewReceipt: (payment: PaymentRecord) => void;
   onRefreshStudent: () => void;
+  onOpenOwnerConsole?: () => void;
 }
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({
@@ -25,7 +26,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   onOpenSupport,
   onOpenAccountDeletion,
   onViewReceipt,
-  onRefreshStudent
+  onRefreshStudent,
+  onOpenOwnerConsole
 }) => {
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [editingName, setEditingName] = useState(false);
@@ -75,7 +77,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           onClick={onOpenAuth}
           className="w-full h-11 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-semibold text-xs shadow-md shadow-purple-700/20 active:scale-95 transition-all"
         >
-          Sign In with Mobile OTP
+          Sign In / Create Account
         </button>
 
         <div className="pt-6 border-t border-slate-200/80">
@@ -141,8 +143,10 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             )}
 
             <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
-              <Smartphone className="w-3.5 h-3.5 text-slate-400" />
-              <span className="font-mono font-medium">+91 {student.phone}</span>
+              <Smartphone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span className="font-mono font-medium truncate">
+                {student.email || (student.phone ? `+91 ${student.phone}` : student.id)}
+              </span>
             </div>
 
             <div className="mt-2">
@@ -197,6 +201,26 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           </div>
           <ChevronRight className="w-4 h-4 text-slate-400" />
         </button>
+
+        {student.isOwner && onOpenOwnerConsole && (
+          <button
+            onClick={onOpenOwnerConsole}
+            className="w-full py-3.5 px-3 flex items-center justify-between hover:bg-indigo-50/70 rounded-xl transition-colors text-left"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center">
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="text-xs font-bold text-indigo-950 block">Owner Admin Console</span>
+                <span className="text-[11px] text-indigo-600">
+                  Private dashboard (visible only to you)
+                </span>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-indigo-400" />
+          </button>
+        )}
       </section>
 
       {/* 3. Payment & Purchase History */}

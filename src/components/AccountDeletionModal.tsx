@@ -60,7 +60,7 @@ export const AccountDeletionModal: React.FC<AccountDeletionModalProps> = ({
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-slate-700 space-y-1">
             <span className="font-semibold block">What happens when you delete:</span>
             <ul className="list-disc list-inside space-y-0.5 text-[11px] text-slate-500">
-              <li>Your phone number and name are purged.</li>
+              <li>Your email/phone, name, and password are purged.</li>
               <li>Lesson progress and completion history are wiped.</li>
               <li>Active course access will be terminated.</li>
             </ul>

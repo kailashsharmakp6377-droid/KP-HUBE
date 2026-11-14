@@ -81,7 +81,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 alt="KP HUBE Founder wearing black hoodie"
                 className="w-full h-full object-cover object-top"
                 onError={(e) => {
-                  e.currentTarget.src = '/public/assets/aistudio/WhatsApp_Image_2026-11-11_at_12.28.57_AM_c5373de0.jpeg';
+                  e.currentTarget.src = '/assets/aistudio/WhatsApp_Image_2026-11-11_at_12.28.57_AM_c5373de0.jpeg';
                 }}
               />
               <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-slate-950/80 via-slate-950/40 to-transparent p-2 text-white text-left">

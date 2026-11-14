@@ -14,13 +14,22 @@ import { CourseDetailsScreen } from './views/CourseDetailsScreen.tsx';
 import { MyCourseScreen } from './views/MyCourseScreen.tsx';
 import { ProfileScreen } from './views/ProfileScreen.tsx';
 import { AdminDashboard } from './views/AdminDashboard.tsx';
+import { OfflineIndicator } from './components/PWAInstallButton.tsx';
 import { Loader2, AlertCircle } from 'lucide-react';
 
+function isOwnerRoute(): boolean {
+  if (typeof window === 'undefined') return false;
+  const p = window.location.pathname.toLowerCase();
+  const h = window.location.hash.toLowerCase();
+  return p === '/owner' || p === '/admin' || h === '#owner' || h === '#admin';
+}
+
 export default function App() {
-  // App Mode: 'concept_4cards' (Matches Demo photo) or 'live_app'
-  const [appMode, setAppMode] = useState<'concept_4cards' | 'live_app'>('concept_4cards');
+  // App Mode: 'live_app' (Full Website / Mobile App) or 'concept_4cards' (4-Screen Showcase)
+  const [appMode, setAppMode] = useState<'concept_4cards' | 'live_app'>('live_app');
   const [currentTab, setCurrentTab] = useState<'home' | 'course' | 'profile'>('home');
-  const [isAdminActive, setIsAdminActive] = useState(false);
+  const [isAdminActive, setIsAdminActive] = useState<boolean>(() => isOwnerRoute());
+  const [apkAvailable, setApkAvailable] = useState<boolean>(false);
 
   // Core Data
   const [course, setCourse] = useState<Course | null>(null);
@@ -32,6 +41,9 @@ export default function App() {
 
   // Modals
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authInitialPhone, setAuthInitialPhone] = useState('');
+  const [authInitialMode, setAuthInitialMode] = useState<'login' | 'register'>('login');
+  const [pendingPaymentAfterAuth, setPendingPaymentAfterAuth] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showSupportModal, setShowSupportModal] = useState(false);
   const [showAccountDeletionModal, setShowAccountDeletionModal] = useState(false);
@@ -40,12 +52,14 @@ export default function App() {
   // Initial Data Fetch
   const loadInitialData = async () => {
     try {
-      const [courseRes, lessonsRes] = await Promise.all([
+      const [courseRes, lessonsRes, apkRes] = await Promise.all([
         api.getCourse(),
-        api.getLessons()
+        api.getLessons(),
+        api.getApkStatus()
       ]);
       setCourse(courseRes.course);
       setLessons(lessonsRes.lessons);
+      setApkAvailable(apkRes.available);
 
       // Check current session
       if (storage.getStudentPhone()) {
@@ -66,6 +80,13 @@ export default function App() {
 
   useEffect(() => {
     loadInitialData();
+    const onHashChange = () => {
+      if (isOwnerRoute()) {
+        setIsAdminActive(true);
+      }
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
 
   const handleRefreshStudent = async () => {
@@ -124,6 +145,8 @@ export default function App() {
     );
   }
 
+  const canAccessAdmin = Boolean(student?.isOwner || storage.getAdminToken());
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#f1f5ff] to-[#e8f7f3] text-slate-900 flex flex-col selection:bg-indigo-100 selection:text-indigo-900">
       {/* Top Bar */}
@@ -138,6 +161,8 @@ export default function App() {
         onOpenAuth={() => setShowAuthModal(true)}
         onOpenAdmin={() => setIsAdminActive(!isAdminActive)}
         isAdminActive={isAdminActive}
+        canAccessAdmin={canAccessAdmin}
+        apkAvailable={apkAvailable}
         appMode={appMode}
         onToggleAppMode={(mode) => {
           setIsAdminActive(false);
@@ -161,10 +186,19 @@ export default function App() {
               course={course!}
               lessons={lessons}
               student={student}
-              onOpenAuth={() => setShowAuthModal(true)}
+              onOpenAuth={(prefill, mode = 'login') => {
+                setAuthInitialPhone(prefill || '');
+                setAuthInitialMode(mode);
+                setPendingPaymentAfterAuth(false);
+                setShowAuthModal(true);
+              }}
               onOpenPayment={() => {
-                if (!student) setShowAuthModal(true);
-                else setShowPaymentModal(true);
+                if (!student) {
+                  setPendingPaymentAfterAuth(true);
+                  setShowAuthModal(true);
+                } else {
+                  setShowPaymentModal(true);
+                }
               }}
               onOpenCourse={() => {
                 setAppMode('live_app');
@@ -178,11 +212,9 @@ export default function App() {
             />
           </div>
         ) : (
-          /* Single Card / Live App Screen (Exact 330px x 640px Card Sizing) */
-          <div className="w-full max-w-[340px] sm:max-w-[420px] transition-all">
-            <div className="w-full min-h-[640px] bg-white rounded-[34px] shadow-[0_14px_32px_rgba(35,49,91,0.14)] border border-slate-100 p-5 sm:p-6 relative pb-20">
-              {/* Top Speaker Notch (Matches demo photo) */}
-              <div className="w-[92px] h-[7px] bg-[#e5e9f2] rounded-full mx-auto -mt-2 mb-4" />
+          /* Live Responsive Website & Mobile App View */
+          <div className="w-full max-w-4xl transition-all">
+            <div className="w-full min-h-[640px] bg-white rounded-3xl shadow-[0_14px_32px_rgba(35,49,91,0.10)] border border-slate-100 p-4 sm:p-6 relative pb-20">
 
               {/* Active Tab Screen */}
               {currentTab === 'home' ? (
@@ -240,6 +272,7 @@ export default function App() {
                   onOpenAccountDeletion={() => setShowAccountDeletionModal(true)}
                   onViewReceipt={(payment) => setSelectedReceipt(payment)}
                   onRefreshStudent={handleRefreshStudent}
+                  onOpenOwnerConsole={canAccessAdmin ? () => setIsAdminActive(true) : undefined}
                 />
               )}
             </div>
@@ -262,10 +295,21 @@ export default function App() {
       {/* Global Modals */}
       <AuthModal
         isOpen={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
+        initialPhone={authInitialPhone}
+        initialMode={authInitialMode}
+        onClose={() => {
+          setShowAuthModal(false);
+          setPendingPaymentAfterAuth(false);
+        }}
         onSuccess={(loggedStudent) => {
           setStudent(loggedStudent);
           handleRefreshStudent();
+          if (pendingPaymentAfterAuth && !loggedStudent.isEnrolled) {
+            setPendingPaymentAfterAuth(false);
+            setShowPaymentModal(true);
+          } else {
+            setPendingPaymentAfterAuth(false);
+          }
         }}
       />
 
@@ -293,6 +337,8 @@ export default function App() {
         onClose={() => setShowAccountDeletionModal(false)}
         onDeleted={handleLogout}
       />
+
+      <OfflineIndicator />
     </div>
   );
 }

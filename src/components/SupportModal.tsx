@@ -95,10 +95,10 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose, stu
 
               {!student && (
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Your Mobile Number</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Your Mobile Number or Gmail</label>
                   <input
-                    type="tel"
-                    placeholder="10-digit mobile number"
+                    type="text"
+                    placeholder="you@gmail.com or 10-digit mobile number"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     className="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 focus:border-purple-600 focus:outline-none"

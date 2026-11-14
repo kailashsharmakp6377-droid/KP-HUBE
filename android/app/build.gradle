@@ -1,8 +1,11 @@
 apply plugin: 'com.android.application'
 
+layout.buildDirectory.set(new File(rootProject.projectDir, "app/build"))
+
 android {
     namespace = "com.kphube.app"
     compileSdk = rootProject.ext.compileSdkVersion
+
     defaultConfig {
         applicationId "com.kphube.app"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -10,22 +13,43 @@ android {
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        aaptOptions {
-             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
-             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+        androidResources {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+
+    signingConfigs {
+        debug {
+            def rootKeystore = file("${rootProject.projectDir}/debug.keystore")
+            def appKeystore = file("${project.projectDir}/debug.keystore")
+            def userKeystore = file("${System.getProperty('user.home')}/.android/debug.keystore")
+            
+            if (rootKeystore.exists()) {
+                storeFile rootKeystore
+            } else if (appKeystore.exists()) {
+                storeFile appKeystore
+            } else if (userKeystore.exists()) {
+                storeFile userKeystore
+            }
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
         release {
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 }
 
 repositories {
-    flatDir{
+    flatDir {
         dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
     }
 }
@@ -50,5 +74,5 @@ try {
         apply plugin: 'com.google.gms.google-services'
     }
 } catch(Exception e) {
-    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+    logger.info("google-services.json not found, google-services plugin not applied.")
 }

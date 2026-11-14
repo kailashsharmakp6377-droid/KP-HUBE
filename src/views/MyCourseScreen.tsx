@@ -183,10 +183,10 @@ export const MyCourseScreen: React.FC<MyCourseScreenProps> = ({
             </div>
           )}
 
-          {/* Anti-Piracy Watermark Overlay (Floating Student Phone) */}
+          {/* Anti-Piracy Watermark Overlay (Floating Student Contact) */}
           {student && (
             <div className="absolute top-3 right-3 pointer-events-none select-none opacity-40 hover:opacity-10 text-[10px] font-mono text-white/90 bg-black/40 px-2 py-0.5 rounded backdrop-blur-xs">
-              KP HUBE • +91 {student.phone}
+              KP HUBE • {student.email || (student.phone ? `+91 ${student.phone}` : student.name)}
             </div>
           )}
         </div>

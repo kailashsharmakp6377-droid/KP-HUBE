@@ -32,11 +32,13 @@ export interface Lesson {
 
 export interface Student {
   id: string;
-  phone: string; // 10 digit Indian number without +91
+  phone?: string; // 10 digit Indian number without +91 (optional if signed up with email)
+  email?: string; // Gmail / Email address
   name?: string;
   isEnrolled: boolean;
   enrolledAt?: string;
   role: 'student' | 'admin';
+  isOwner?: boolean;
   lastLoginAt: string;
   createdAt: string;
   completedLessonIds: string[];
