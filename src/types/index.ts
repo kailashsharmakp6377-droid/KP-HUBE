@@ -3,7 +3,7 @@ export interface Course {
   title: string;
   tagline: string;
   description: string;
-  price: number; // in INR e.g. 499
+  price: number; // in INR e.g. 49
   originalPrice: number; // in INR e.g. 1999
   bannerImage: string;
   founderName: string; // "Founder & Mentor"
@@ -48,7 +48,7 @@ export interface PaymentRecord {
   id: string;
   orderId: string;
   paymentId?: string;
-  amount: number; // ₹499
+  amount: number; // ₹49
   currency: string; // 'INR'
   status: 'created' | 'paid' | 'failed';
   method: 'razorpay_upi' | 'razorpay_card' | 'razorpay_netbanking' | 'manual_admin' | 'gateway_test';

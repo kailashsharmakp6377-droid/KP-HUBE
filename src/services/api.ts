@@ -2,6 +2,7 @@ import type { Course, Lesson, Student, PaymentRecord, AuditLog, SupportTicket } 
 import { isNativeCapacitorApp } from '../hooks/usePWAInstall.ts';
 
 const STUDENT_PHONE_KEY = 'kphube_student_phone';
+const LAST_IDENTIFIER_KEY = 'kphube_last_identifier';
 const ADMIN_TOKEN_KEY = 'kphube_admin_token';
 
 const DEFAULT_NATIVE_API_BASE = 'https://ais-pre-oifnthjmv5hmrg4o4n7nk3-37682163655.asia-northeast1.run.app';
@@ -26,6 +27,17 @@ export const storage = {
   },
   removeStudentPhone() {
     localStorage.removeItem(STUDENT_PHONE_KEY);
+  },
+  getLastIdentifier(): string {
+    return localStorage.getItem(LAST_IDENTIFIER_KEY) || '';
+  },
+  setLastIdentifier(identifier: string) {
+    if (identifier.trim()) {
+      localStorage.setItem(LAST_IDENTIFIER_KEY, identifier.trim());
+    }
+  },
+  removeLastIdentifier() {
+    localStorage.removeItem(LAST_IDENTIFIER_KEY);
   },
   getAdminToken(): string | null {
     return localStorage.getItem(ADMIN_TOKEN_KEY);
@@ -89,6 +101,7 @@ export const api = {
     phone?: string;
     password: string;
     name?: string;
+    ownerSetupKey?: string;
   }): Promise<{ success: boolean; token: string; student: Student }> {
     const res = await fetch(apiUrl('/api/auth/register'), {
       method: 'POST',
@@ -96,8 +109,14 @@ export const api = {
       body: JSON.stringify(payload)
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to create account');
+    if (!res.ok) {
+      const err: any = new Error(data.error || 'Failed to create account');
+      err.requireOwnerKey = Boolean(data.requireOwnerKey);
+      err.switchToLogin = Boolean(data.switchToLogin);
+      throw err;
+    }
     storage.setStudentPhone(data.token);
+    storage.setLastIdentifier(data.student?.email || data.student?.phone || payload.identifier || '');
     return data;
   },
 
@@ -113,6 +132,7 @@ export const api = {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to sign in');
     storage.setStudentPhone(data.token);
+    storage.setLastIdentifier(data.student?.email || data.student?.phone || payload.identifier || '');
     return data;
   },
 
@@ -141,6 +161,7 @@ export const api = {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to delete account');
     storage.removeStudentPhone();
+    storage.removeLastIdentifier();
     return data;
   },
 
@@ -216,11 +237,11 @@ export const api = {
     return data;
   },
 
-  // Admin
+  // Admin (Requires BOTH verified Owner session & private Admin Key)
   async adminLogin(secretKey: string): Promise<{ success: boolean; adminToken: string }> {
     const res = await fetch(apiUrl('/api/admin/login'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getHeaders(false),
       body: JSON.stringify({ secretKey })
     });
     const data = await res.json();

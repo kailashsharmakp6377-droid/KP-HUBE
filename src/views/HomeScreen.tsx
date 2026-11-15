@@ -152,7 +152,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   ₹{course.originalPrice}
                 </span>
                 <span className="text-xs font-bold text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-md">
-                  75% OFF
+                  {course.originalPrice > course.price
+                    ? `${Math.round((1 - course.price / course.originalPrice) * 100)}% OFF`
+                    : 'SPECIAL OFFER'}
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 mt-1">

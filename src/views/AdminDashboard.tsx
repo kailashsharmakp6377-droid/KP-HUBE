@@ -279,14 +279,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
                 type="password"
                 value={secretKeyInput}
                 onChange={(e) => setSecretKeyInput(e.target.value)}
-                placeholder="Enter ADMIN_SECRET_KEY"
+                placeholder="Enter your private Owner Admin Key"
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-purple-600 focus:ring-2 focus:ring-purple-100 text-sm focus:outline-none"
                 autoFocus
                 required
               />
-              <p className="text-[11px] text-slate-400 mt-1">
-                Configured in <code>.env.example</code> (Default: <code>kphube_admin_2026_secret</code>)
-              </p>
             </div>
 
             <div className="flex gap-2">
@@ -327,7 +324,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
               </span>
             </div>
             <p className="text-xs text-slate-400">
-              Managing: <strong>KP HUBE Complete YouTube Course</strong> (₹{course?.price || 499})
+              Managing: <strong>KP HUBE Complete YouTube Course</strong> (₹{course?.price || 49})
             </p>
           </div>
         </div>
@@ -415,7 +412,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
               <span className="font-brand font-black text-2xl text-purple-900 mt-1 block">
                 ₹{overview.totalRevenue.toLocaleString('en-IN')}
               </span>
-              <span className="text-[10px] text-slate-500">₹{overview.coursePrice || 499} per verified student</span>
+              <span className="text-[10px] text-slate-500">₹{overview.coursePrice || 49} per verified student</span>
             </div>
 
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
@@ -999,7 +996,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
         <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-4">
           <div className="border-b border-slate-100 pb-3">
             <h2 className="font-brand font-bold text-lg text-slate-900">Course & Founder Settings</h2>
-            <p className="text-xs text-slate-500">Configure course price (default ₹499), description, and founder portrait</p>
+            <p className="text-xs text-slate-500">Configure course price (default ₹49), description, and founder portrait</p>
           </div>
 
           {saveSuccessMsg && (
@@ -1040,7 +1037,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
                 <input
                   type="number"
                   min={1}
-                  value={courseForm.price || 499}
+                  value={courseForm.price || 49}
                   onChange={(e) => setCourseForm({ ...courseForm, price: Number(e.target.value) })}
                   className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none font-bold text-purple-900"
                   required

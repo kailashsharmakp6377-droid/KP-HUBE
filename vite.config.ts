@@ -23,7 +23,7 @@ export default defineConfig(() => {
           name: 'KP HUBE - YouTube Creator Course',
           short_name: 'KP HUBE',
           description:
-            'KP HUBE Complete YouTube Course (₹499) — LEARN • GROW • SUCCEED. 14 Roman Hindi lessons, progress tracking, and creator portal.',
+            'KP HUBE Complete YouTube Course (₹49) — LEARN • GROW • SUCCEED. 5 Step-by-Step Video Episodes, progress tracking, and creator portal.',
           theme_color: '#5B21B6',
           background_color: '#FFFFFF',
           display: 'standalone',

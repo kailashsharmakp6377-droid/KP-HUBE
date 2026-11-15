@@ -52,13 +52,13 @@ const DEFAULT_COURSE: Course = {
   title: 'KP HUBE Complete YouTube Course',
   tagline: 'LEARN • GROW • SUCCEED',
   description: 'Learn how to start a YouTube channel, create videos, reach more viewers, and understand channel growth and monetization.',
-  price: 499,
+  price: 49,
   originalPrice: 1999,
   bannerImage: '/assets/founder.jpg',
   founderName: 'KP HUBE Founder & Mentor',
   founderRole: 'YouTube Growth Specialist & Content Creator',
   founderBio: 'Dedicated to helping Indian aspiring creators build, monetize, and scale high-impact YouTube channels from scratch.',
-  announcement: 'Special inaugural batch access for just ₹499 one-time. Lifetime access included.',
+  announcement: 'Special inaugural batch access for just ₹49 one-time. Lifetime access included.',
   totalLessons: 5,
   enrolledCount: 142,
   features: [
@@ -138,6 +138,14 @@ function loadDatabase(): DatabaseSchema {
         migrated = true;
       }
 
+      if (course.price === 499 || course.price === 149) {
+        course.price = 49;
+        if (typeof course.announcement === 'string') {
+          course.announcement = course.announcement.replace(/₹(499|149)/g, '₹49');
+        }
+        migrated = true;
+      }
+
       const loaded: DatabaseSchema = {
         course,
         lessons,
@@ -184,7 +192,9 @@ function loadDatabase(): DatabaseSchema {
 
 function saveDatabase(data: DatabaseSchema) {
   try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    const tmpFile = `${DB_FILE}.tmp`;
+    fs.writeFileSync(tmpFile, JSON.stringify(data, null, 2), 'utf-8');
+    fs.renameSync(tmpFile, DB_FILE);
   } catch (err) {
     console.error('Error saving db.json:', err);
   }
@@ -192,13 +202,72 @@ function saveDatabase(data: DatabaseSchema) {
 
 let db = loadDatabase();
 
-// Admin Secret Key & Owner Email from env
-const ADMIN_SECRET = process.env.ADMIN_SECRET_KEY || 'kphube_admin_2026_secret';
+// Admin Secret Key & Owner Email (NEVER exposed in client code or .env.example)
+const ADMIN_SECRET_FILE = path.join(PRIVATE_DIR, '.admin-secret');
+function loadOrCreateAdminSecret(): string {
+  const fromEnv = (process.env.ADMIN_SECRET_KEY || '').trim();
+  if (fromEnv && fromEnv !== 'kphube_admin_2026_secret') {
+    return fromEnv;
+  }
+  try {
+    if (fs.existsSync(ADMIN_SECRET_FILE)) {
+      const existing = fs.readFileSync(ADMIN_SECRET_FILE, 'utf-8').trim();
+      if (existing.length >= 24) return existing;
+    }
+  } catch {
+    // regenerate below if unreadable
+  }
+  const generated = crypto.randomBytes(24).toString('base64url');
+  fs.writeFileSync(ADMIN_SECRET_FILE, generated, { mode: 0o600 });
+  return generated;
+}
+
+const ADMIN_SECRET = loadOrCreateAdminSecret();
 const OWNER_EMAIL = (process.env.OWNER_EMAIL || 'kpattitudeshort@gmail.com').trim().toLowerCase();
 const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || '';
 const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || 'kphube_mock_secret_key_2026';
 const UPI_MERCHANT_VPA = process.env.UPI_MERCHANT_VPA || 'kailash100k@axl';
 const UPI_MERCHANT_NAME = process.env.UPI_MERCHANT_NAME || 'KP HUBE';
+
+// Ephemeral in-memory owner admin sessions + brute-force lockout
+const adminSessions = new Map<string, { studentId: string; expiresAt: number }>();
+const adminFailedAttempts = new Map<string, { count: number; lockedUntil: number }>();
+const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const ADMIN_LOCKOUT_MS = 15 * 60 * 1000;
+const MAX_ADMIN_FAILURES = 5;
+
+function verifyAdminSecret(candidate: string): boolean {
+  if (!candidate) return false;
+  const a = Buffer.from(candidate, 'utf-8');
+  const b = Buffer.from(ADMIN_SECRET, 'utf-8');
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
+function getRateLimitKey(req: Request): string {
+  return String(req.ip || req.socket.remoteAddress || 'unknown');
+}
+
+function checkAdminRateLimit(key: string): number | null {
+  const entry = adminFailedAttempts.get(key);
+  if (!entry) return null;
+  if (entry.lockedUntil > Date.now()) {
+    return Math.ceil((entry.lockedUntil - Date.now()) / 1000);
+  }
+  if (entry.lockedUntil && entry.lockedUntil <= Date.now()) {
+    adminFailedAttempts.delete(key);
+  }
+  return null;
+}
+
+function recordAdminFailure(key: string) {
+  const current = adminFailedAttempts.get(key) || { count: 0, lockedUntil: 0 };
+  current.count += 1;
+  if (current.count >= MAX_ADMIN_FAILURES) {
+    current.lockedUntil = Date.now() + ADMIN_LOCKOUT_MS;
+  }
+  adminFailedAttempts.set(key, current);
+}
 
 // Password Hashing Helpers (Node scrypt + per-user random salt)
 function hashPassword(password: string): string {
@@ -230,39 +299,115 @@ function getStudentContactLabel(student: Student): string {
   return student.email || student.id;
 }
 
-// Session helper for students
-function getStudentFromReq(req: Request): StoredStudent | null {
-  const token = req.headers['authorization']?.replace('Bearer ', '') || (req.headers['x-student-phone'] as string);
-  if (!token) return null;
-  const lower = token.toLowerCase();
-  return db.students.find(s => s.id === token || s.phone === token || (s.email && s.email.toLowerCase() === lower)) || null;
+// Signed student session tokens (30-day TTL, prevents impersonating owner by guessing email/id)
+const STUDENT_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const SESSION_SIGNING_KEY = crypto
+  .createHash('sha256')
+  .update(`kphube-student-session-v1:${ADMIN_SECRET}`)
+  .digest();
+
+function issueStudentToken(studentId: string): string {
+  const expiresAt = Date.now() + STUDENT_SESSION_TTL_MS;
+  const payload = `${studentId}.${expiresAt}`;
+  const sig = crypto.createHmac('sha256', SESSION_SIGNING_KEY).update(payload).digest('base64url');
+  return `${payload}.${sig}`;
 }
 
-// Admin RBAC middleware
+function verifyStudentToken(token: string): string | null {
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  const [studentId, expStr, sig] = parts;
+  const expiresAt = Number(expStr);
+  if (!studentId || !Number.isFinite(expiresAt) || expiresAt < Date.now()) return null;
+  const expected = crypto
+    .createHmac('sha256', SESSION_SIGNING_KEY)
+    .update(`${studentId}.${expStr}`)
+    .digest('base64url');
+  const a = Buffer.from(sig, 'utf-8');
+  const b = Buffer.from(expected, 'utf-8');
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  return studentId;
+}
+
+// Session helper for students (only accepts valid HMAC-signed session tokens)
+function getStudentFromReq(req: Request): StoredStudent | null {
+  const authHeader = req.headers['authorization'];
+  const rawToken = typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
+    ? authHeader.slice(7).trim()
+    : '';
+  if (!rawToken) return null;
+  const studentId = verifyStudentToken(rawToken);
+  if (!studentId) return null;
+  return db.students.find(s => s.id === studentId) || null;
+}
+
+// Admin RBAC middleware: requires BOTH verified Owner session AND valid ephemeral admin session token
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  const adminToken = req.headers['x-admin-token'] || req.headers['authorization']?.replace('Bearer ', '');
-  if (!adminToken || adminToken !== ADMIN_SECRET) {
-    res.status(403).json({ error: 'Unauthorized: Admin access required' });
+  const student = getStudentFromReq(req);
+  if (!student || !student.email || student.email.toLowerCase() !== OWNER_EMAIL) {
+    res.status(403).json({ error: 'Unauthorized: Owner account required.' });
+    return;
+  }
+  const adminToken = String(req.headers['x-admin-token'] || '');
+  const session = adminSessions.get(adminToken);
+  if (!session || session.studentId !== student.id || session.expiresAt < Date.now()) {
+    if (session && session.expiresAt < Date.now()) {
+      adminSessions.delete(adminToken);
+    }
+    res.status(403).json({ error: 'Unauthorized: Admin verification required.' });
     return;
   }
   next();
 }
 
-// ==================== AUTH ROUTES (NO OTP — EMAIL/PHONE + PASSWORD) ====================
+// ==================== AUTH HELPERS & ROUTES (NO OTP — GMAIL/PHONE + PASSWORD) ====================
+
+function canonicalEmail(rawEmail: string): string {
+  const cleaned = rawEmail.replace(/\s+/g, '').toLowerCase();
+  const atIdx = cleaned.indexOf('@');
+  if (atIdx === -1) return cleaned;
+  const local = cleaned.slice(0, atIdx);
+  let domain = cleaned.slice(atIdx + 1);
+  if (domain === 'googlemail.com') {
+    domain = 'gmail.com';
+  }
+  if (domain === 'gmail.com') {
+    return `${local.replace(/\./g, '')}@gmail.com`;
+  }
+  return `${local}@${domain}`;
+}
+
+function normalizeIndianPhone(rawPhone: string): string {
+  let digits = rawPhone.replace(/\D/g, '');
+  if (digits.length === 12 && digits.startsWith('91')) {
+    digits = digits.slice(2);
+  } else if (digits.length === 11 && digits.startsWith('0')) {
+    digits = digits.slice(1);
+  }
+  return digits;
+}
+
+function findStudentByIdentifier(cleanEmail: string, cleanPhone: string): StoredStudent | undefined {
+  const canonEmail = cleanEmail ? canonicalEmail(cleanEmail) : '';
+  return db.students.find(s =>
+    (canonEmail && s.email && canonicalEmail(s.email) === canonEmail) ||
+    (cleanPhone && s.phone && normalizeIndianPhone(s.phone) === cleanPhone)
+  );
+}
 
 // Create Student Account (Gmail/Email or Mobile Number + Password)
 app.post('/api/auth/register', (req, res) => {
-  const { identifier, email, phone, password, name } = req.body;
+  const { identifier, email, phone, password, name, ownerSetupKey } = req.body;
 
   const rawId = String(identifier || '').trim();
-  let cleanEmail = String(email || '').trim().toLowerCase();
-  let cleanPhone = String(phone || '').replace(/\D/g, '');
+  let cleanEmail = String(email || '').replace(/\s+/g, '').toLowerCase();
+  let cleanPhone = normalizeIndianPhone(String(phone || ''));
 
   if (rawId) {
     if (rawId.includes('@')) {
-      cleanEmail = cleanEmail || rawId.toLowerCase();
+      cleanEmail = cleanEmail || rawId.replace(/\s+/g, '').toLowerCase();
     } else {
-      cleanPhone = cleanPhone || rawId.replace(/\D/g, '');
+      cleanPhone = cleanPhone || normalizeIndianPhone(rawId);
     }
   }
 
@@ -281,12 +426,41 @@ app.post('/api/auth/register', (req, res) => {
     return res.status(400).json({ error: 'Password must be at least 6 characters long.' });
   }
 
-  const existing = db.students.find(s =>
-    (cleanEmail && s.email && s.email.toLowerCase() === cleanEmail) ||
-    (cleanPhone && s.phone === cleanPhone)
-  );
+  const existing = findStudentByIdentifier(cleanEmail, cleanPhone);
   if (existing) {
-    return res.status(409).json({ error: 'Account already exists with this Email or Mobile Number. Please Sign In.' });
+    // If the user already signed up with this Gmail/Phone and entered their matching password, log them right in
+    if (existing.passwordHash && verifyPassword(rawPassword, existing.passwordHash)) {
+      existing.lastLoginAt = new Date().toISOString();
+      saveDatabase(db);
+      return res.json({
+        success: true,
+        token: issueStudentToken(existing.id),
+        student: sanitizeStudent(existing)
+      });
+    }
+    return res.status(409).json({
+      error: 'This Gmail or Mobile number is already registered. Please enter your password on Sign In.',
+      switchToLogin: true
+    });
+  }
+
+  // Prevent anyone else from registering the reserved Owner email without the private Owner Key
+  if (canonicalEmail(cleanEmail) === canonicalEmail(OWNER_EMAIL)) {
+    const rateKey = getRateLimitKey(req);
+    const retryAfter = checkAdminRateLimit(rateKey);
+    if (retryAfter) {
+      return res.status(429).json({ error: `Too many failed attempts. Please wait ${retryAfter}s.` });
+    }
+    if (!verifyAdminSecret(String(ownerSetupKey || '').trim())) {
+      if (ownerSetupKey) {
+        recordAdminFailure(rateKey);
+      }
+      return res.status(403).json({
+        error: 'This owner email requires the private Owner Key to register.',
+        requireOwnerKey: true
+      });
+    }
+    adminFailedAttempts.delete(rateKey);
   }
 
   const fallbackName = cleanEmail
@@ -311,7 +485,7 @@ app.post('/api/auth/register', (req, res) => {
 
   return res.json({
     success: true,
-    token: newStudent.id,
+    token: issueStudentToken(newStudent.id),
     student: sanitizeStudent(newStudent)
   });
 });
@@ -323,20 +497,19 @@ app.post('/api/auth/login', (req, res) => {
   const rawPassword = String(password || '');
 
   if (!rawId || !rawPassword) {
-    return res.status(400).json({ error: 'Email/Mobile number and password are required.' });
+    return res.status(400).json({ error: 'Gmail / Mobile number and password are required.' });
   }
 
   const isEmail = rawId.includes('@');
-  const cleanEmail = isEmail ? rawId.toLowerCase() : '';
-  const cleanPhone = !isEmail ? rawId.replace(/\D/g, '') : '';
+  const cleanEmail = isEmail ? rawId.replace(/\s+/g, '').toLowerCase() : '';
+  const cleanPhone = !isEmail ? normalizeIndianPhone(rawId) : '';
 
-  const student = db.students.find(s =>
-    (cleanEmail && s.email && s.email.toLowerCase() === cleanEmail) ||
-    (cleanPhone && s.phone === cleanPhone)
-  );
+  const student = findStudentByIdentifier(cleanEmail, cleanPhone);
 
   if (!student) {
-    return res.status(401).json({ error: 'No account found with this Email or Mobile number. Please create a new account.' });
+    return res.status(401).json({
+      error: 'No account found with this Gmail or Mobile number. Please tap Create Account first.'
+    });
   }
 
   if (!student.passwordHash) {
@@ -346,7 +519,7 @@ app.post('/api/auth/login', (req, res) => {
     }
     student.passwordHash = hashPassword(rawPassword);
   } else if (!verifyPassword(rawPassword, student.passwordHash)) {
-    return res.status(401).json({ error: 'Incorrect password. Please try again.' });
+    return res.status(401).json({ error: 'Incorrect password. Please check and try again.' });
   }
 
   student.lastLoginAt = new Date().toISOString();
@@ -354,7 +527,7 @@ app.post('/api/auth/login', (req, res) => {
 
   return res.json({
     success: true,
-    token: student.id,
+    token: issueStudentToken(student.id),
     student: sanitizeStudent(student)
   });
 });
@@ -503,7 +676,7 @@ app.post('/api/payment/create-order', (req, res) => {
     return res.status(400).json({ error: 'You are already enrolled in this course.' });
   }
 
-  const amountPaise = db.course.price * 100; // 499 * 100 = 49900 paise
+  const amountPaise = db.course.price * 100; // 49 * 100 = 4900 paise
   const orderId = `order_kphube_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
   const receiptNumber = `RCPT-${Date.now().toString().slice(-6)}`;
   const studentContact = student.phone || student.email || student.id;
@@ -648,15 +821,35 @@ app.post('/api/support', (req, res) => {
 
 // ==================== OWNER ADMIN ROUTES ====================
 
-// Admin Login
+// Admin Login (Strictly Owner Account + Private Master Key + Rate Limit + Ephemeral Session Token)
 app.post('/api/admin/login', (req, res) => {
-  const { secretKey } = req.body;
-  if (!secretKey || secretKey !== ADMIN_SECRET) {
-    return res.status(401).json({ error: 'Incorrect Admin Master Key.' });
+  const student = getStudentFromReq(req);
+  if (!student || !student.email || student.email.toLowerCase() !== OWNER_EMAIL) {
+    return res.status(403).json({ error: 'Access denied: Only the verified owner account can open Admin.' });
   }
+
+  const rateKey = `${getRateLimitKey(req)}:${student.id}`;
+  const retryAfter = checkAdminRateLimit(rateKey);
+  if (retryAfter) {
+    return res.status(429).json({ error: `Too many wrong attempts. Try again in ${retryAfter}s.` });
+  }
+
+  const secretKey = String(req.body?.secretKey || '').trim();
+  if (!verifyAdminSecret(secretKey)) {
+    recordAdminFailure(rateKey);
+    return res.status(401).json({ error: 'Incorrect Owner Admin Key.' });
+  }
+
+  adminFailedAttempts.delete(rateKey);
+  const sessionToken = crypto.randomBytes(32).toString('hex');
+  adminSessions.set(sessionToken, {
+    studentId: student.id,
+    expiresAt: Date.now() + ADMIN_SESSION_TTL_MS
+  });
+
   return res.json({
     success: true,
-    adminToken: ADMIN_SECRET,
+    adminToken: sessionToken,
     role: 'owner'
   });
 });

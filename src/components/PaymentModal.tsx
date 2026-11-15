@@ -244,7 +244,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 Payment Verified!
               </h4>
               <p className="text-xs text-slate-600">
-                Your payment of <strong>₹{orderData?.amountRupees || 499}</strong> has been verified. The <strong>KP HUBE Complete YouTube Course</strong> is now unlocked.
+                Your payment of <strong>₹{orderData?.amountRupees || 49}</strong> has been verified. The <strong>KP HUBE Complete YouTube Course</strong> is now unlocked.
               </p>
               <button
                 onClick={onClose}

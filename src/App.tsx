@@ -28,7 +28,7 @@ export default function App() {
   // App Mode: 'live_app' (Full Website / Mobile App) or 'concept_4cards' (4-Screen Showcase)
   const [appMode, setAppMode] = useState<'concept_4cards' | 'live_app'>('live_app');
   const [currentTab, setCurrentTab] = useState<'home' | 'course' | 'profile'>('home');
-  const [isAdminActive, setIsAdminActive] = useState<boolean>(() => isOwnerRoute());
+  const [isAdminActive, setIsAdminActive] = useState<boolean>(false);
   const [apkAvailable, setApkAvailable] = useState<boolean>(false);
 
   // Core Data
@@ -66,10 +66,21 @@ export default function App() {
         try {
           const meRes = await api.getMe();
           setStudent(meRes.student);
+          if (meRes.student.isOwner && isOwnerRoute()) {
+            setIsAdminActive(true);
+          } else if (!meRes.student.isOwner) {
+            storage.removeAdminToken();
+            setIsAdminActive(false);
+          }
         } catch {
           storage.removeStudentPhone();
+          storage.removeAdminToken();
           setStudent(null);
+          setIsAdminActive(false);
         }
+      } else {
+        storage.removeAdminToken();
+        setIsAdminActive(false);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to connect to KP HUBE server.');
@@ -80,20 +91,27 @@ export default function App() {
 
   useEffect(() => {
     loadInitialData();
+  }, []);
+
+  useEffect(() => {
     const onHashChange = () => {
-      if (isOwnerRoute()) {
+      if (isOwnerRoute() && student?.isOwner) {
         setIsAdminActive(true);
       }
     };
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
-  }, []);
+  }, [student?.isOwner]);
 
   const handleRefreshStudent = async () => {
     if (storage.getStudentPhone()) {
       try {
         const meRes = await api.getMe();
         setStudent(meRes.student);
+        if (!meRes.student.isOwner) {
+          storage.removeAdminToken();
+          setIsAdminActive(false);
+        }
         const lsnRes = await api.getLessons();
         setLessons(lsnRes.lessons);
       } catch (err) {
@@ -108,9 +126,23 @@ export default function App() {
     setAppMode('live_app');
   };
 
+  const openAuthModal = (
+    prefill = '',
+    mode: 'login' | 'register' = 'login',
+    afterPayment = false
+  ) => {
+    setAuthInitialPhone(prefill);
+    setAuthInitialMode(mode);
+    setPendingPaymentAfterAuth(afterPayment);
+    setShowAuthModal(true);
+  };
+
   const handleLogout = () => {
     storage.removeStudentPhone();
+    storage.removeAdminToken();
     setStudent(null);
+    setIsAdminActive(false);
+    setSelectedLessonId(undefined);
     setCurrentTab('home');
   };
 
@@ -145,7 +177,8 @@ export default function App() {
     );
   }
 
-  const canAccessAdmin = Boolean(student?.isOwner || storage.getAdminToken());
+  const canAccessAdmin = Boolean(student?.isOwner);
+  const showAdminView = canAccessAdmin && isAdminActive;
   const activePreviewLesson = selectedLessonId
     ? lessons.find(l => l.id === selectedLessonId && l.isFreePreview)
     : undefined;
@@ -163,9 +196,11 @@ export default function App() {
           setCurrentTab(tab);
         }}
         student={student}
-        onOpenAuth={() => setShowAuthModal(true)}
-        onOpenAdmin={() => setIsAdminActive(!isAdminActive)}
-        isAdminActive={isAdminActive}
+        onOpenAuth={() => openAuthModal()}
+        onOpenAdmin={() => {
+          if (canAccessAdmin) setIsAdminActive(!isAdminActive);
+        }}
+        isAdminActive={showAdminView}
         canAccessAdmin={canAccessAdmin}
         apkAvailable={apkAvailable}
         appMode={appMode}
@@ -177,7 +212,7 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 flex justify-center py-4 sm:py-6 px-3 sm:px-4">
-        {isAdminActive ? (
+        {showAdminView ? (
           <div className="w-full max-w-5xl">
             <AdminDashboard
               onExit={() => setIsAdminActive(false)}
@@ -191,16 +226,10 @@ export default function App() {
               course={course!}
               lessons={lessons}
               student={student}
-              onOpenAuth={(prefill, mode = 'login') => {
-                setAuthInitialPhone(prefill || '');
-                setAuthInitialMode(mode);
-                setPendingPaymentAfterAuth(false);
-                setShowAuthModal(true);
-              }}
+              onOpenAuth={(prefill, mode = 'login') => openAuthModal(prefill || '', mode, false)}
               onOpenPayment={() => {
                 if (!student) {
-                  setPendingPaymentAfterAuth(true);
-                  setShowAuthModal(true);
+                  openAuthModal('', 'login', true);
                 } else {
                   setShowPaymentModal(true);
                 }
@@ -237,16 +266,14 @@ export default function App() {
                       setSelectedLessonId(lesson.id);
                       setCurrentTab('course');
                     } else if (!student) {
-                      setPendingPaymentAfterAuth(true);
-                      setShowAuthModal(true);
+                      openAuthModal('', 'login', true);
                     } else {
                       setShowPaymentModal(true);
                     }
                   }}
                   onOpenPayment={() => {
                     if (!student) {
-                      setPendingPaymentAfterAuth(true);
-                      setShowAuthModal(true);
+                      openAuthModal('', 'login', true);
                     } else {
                       setShowPaymentModal(true);
                     }
@@ -260,8 +287,7 @@ export default function App() {
                     student={student}
                     onOpenPayment={() => {
                       if (!student) {
-                        setPendingPaymentAfterAuth(true);
-                        setShowAuthModal(true);
+                        openAuthModal('', 'login', true);
                       } else {
                         setShowPaymentModal(true);
                       }
@@ -277,8 +303,7 @@ export default function App() {
                     student={student}
                     onOpenPayment={() => {
                       if (!student) {
-                        setPendingPaymentAfterAuth(true);
-                        setShowAuthModal(true);
+                        openAuthModal('', 'login', true);
                       } else {
                         setShowPaymentModal(true);
                       }
@@ -287,8 +312,7 @@ export default function App() {
                       if (lesson.isFreePreview || student?.isEnrolled) {
                         setSelectedLessonId(lesson.id);
                       } else if (!student) {
-                        setPendingPaymentAfterAuth(true);
-                        setShowAuthModal(true);
+                        openAuthModal('', 'login', true);
                       } else {
                         setShowPaymentModal(true);
                       }
@@ -300,7 +324,7 @@ export default function App() {
                   student={student}
                   coursePrice={course?.price}
                   totalLessons={lessons.length || course?.totalLessons}
-                  onOpenAuth={() => setShowAuthModal(true)}
+                  onOpenAuth={() => openAuthModal()}
                   onLogout={handleLogout}
                   onGoToCourse={() => {
                     setSelectedLessonId(undefined);
@@ -319,7 +343,7 @@ export default function App() {
       </main>
 
       {/* Fixed Bottom Navigation (in single live app mode) */}
-      {!isAdminActive && appMode === 'live_app' && (
+      {!showAdminView && appMode === 'live_app' && (
         <BottomNav
           currentTab={currentTab}
           onSelectTab={(tab) => {

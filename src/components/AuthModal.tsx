@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Mail, Lock, User, ArrowRight, Eye, EyeOff, AlertCircle, Loader2, ShieldCheck } from 'lucide-react';
-import { api } from '../services/api.ts';
+import { api, storage } from '../services/api.ts';
 import type { Student } from '../types/index.ts';
 
 interface AuthModalProps {
@@ -22,6 +22,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [identifier, setIdentifier] = useState(initialPhone);
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
+  const [ownerSetupKey, setOwnerSetupKey] = useState('');
+  const [needsOwnerKey, setNeedsOwnerKey] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,8 +33,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setMode(initialMode);
       setError(null);
       setPassword('');
+      setOwnerSetupKey('');
+      setNeedsOwnerKey(false);
       if (initialPhone) {
         setIdentifier(initialPhone.trim());
+      } else {
+        const lastUsed = storage.getLastIdentifier();
+        if (lastUsed) {
+          setIdentifier(lastUsed);
+        }
       }
     }
   }, [isOpen, initialPhone, initialMode]);
@@ -71,12 +80,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     try {
       const res =
         mode === 'register'
-          ? await api.register({ identifier: cleanId, password, name })
+          ? await api.register({
+              identifier: cleanId,
+              password,
+              name,
+              ...(needsOwnerKey || ownerSetupKey ? { ownerSetupKey: ownerSetupKey.trim() } : {})
+            })
           : await api.login({ identifier: cleanId, password });
 
       onSuccess(res.student);
       onClose();
     } catch (err: any) {
+      if (err.requireOwnerKey) {
+        setNeedsOwnerKey(true);
+      }
+      if (err.switchToLogin) {
+        setMode('login');
+      }
       setError(err.message || 'Authentication failed. Please try again.');
     } finally {
       setLoading(false);
@@ -151,7 +171,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} autoComplete="on" className="space-y-4">
             {mode === 'register' && (
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">
@@ -163,6 +183,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </span>
                   <input
                     type="text"
+                    name="name"
+                    autoComplete="name"
                     placeholder="e.g. Rahul Sharma"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
@@ -182,6 +204,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </span>
                 <input
                   type="text"
+                  name="email"
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   placeholder="you@gmail.com or 9876543210"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
@@ -202,6 +229,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </span>
                 <input
                   type={showPassword ? 'text' : 'password'}
+                  name="password"
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                   placeholder="Minimum 6 characters"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -211,6 +240,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 />
                 <button
                   type="button"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
                   onClick={() => setShowPassword(!showPassword)}
                   className="pr-3 text-slate-400 hover:text-slate-700"
                 >
@@ -218,6 +248,27 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </button>
               </div>
             </div>
+
+            {mode === 'register' && needsOwnerKey && (
+              <div>
+                <label className="block text-xs font-semibold text-amber-800 mb-1.5">
+                  Private Owner Admin Key
+                </label>
+                <div className="relative flex items-center rounded-xl border border-amber-400 bg-amber-50/50 focus-within:border-[#4f46e5] focus-within:ring-2 focus-within:ring-indigo-100 transition-all overflow-hidden">
+                  <span className="pl-3 text-amber-600">
+                    <ShieldCheck className="w-4 h-4" />
+                  </span>
+                  <input
+                    type="password"
+                    placeholder="Enter private Owner Admin Key"
+                    value={ownerSetupKey}
+                    onChange={(e) => setOwnerSetupKey(e.target.value)}
+                    className="w-full px-3 py-2.5 text-sm text-slate-900 bg-transparent placeholder:text-slate-400 focus:outline-none"
+                    required
+                  />
+                </div>
+              </div>
+            )}
 
             <button
               type="submit"

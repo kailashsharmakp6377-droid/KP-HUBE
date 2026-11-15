@@ -22,7 +22,7 @@ interface ProfileScreenProps {
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   student,
-  coursePrice = 499,
+  coursePrice = 49,
   totalLessons = 5,
   onOpenAuth,
   onLogout,
