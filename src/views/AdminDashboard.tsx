@@ -9,15 +9,18 @@ import { api, storage } from '../services/api.ts';
 import type { Course, Lesson, Student, PaymentRecord, AuditLog, SupportTicket } from '../types/index.ts';
 
 interface AdminDashboardProps {
+  ownerEmail?: string;
   onExit: () => void;
   onRefreshData: () => void;
 }
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefreshData }) => {
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ ownerEmail = '', onExit, onRefreshData }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return Boolean(storage.getAdminToken());
   });
+  const [ownerEmailInput, setOwnerEmailInput] = useState(ownerEmail);
   const [secretKeyInput, setSecretKeyInput] = useState('');
+  const [showSecretKey, setShowSecretKey] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginLoading, setLoginLoading] = useState(false);
 
@@ -26,6 +29,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
 
   // Admin Data State
   const [overview, setOverview] = useState<any>(null);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [selectedCourseId, setSelectedCourseId] = useState<string>('course-vip-01');
+  const [grantCourseId, setGrantCourseId] = useState<string>('course-vip-01');
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [students, setStudents] = useState<(Student & { purchaseRecord?: PaymentRecord })[]>([]);
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
@@ -50,6 +56,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
   const [apkSaving, setApkSaving] = useState(false);
   const [adminToast, setAdminToast] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
   const [confirmDeleteLesson, setConfirmDeleteLesson] = useState<{ id: string; title: string } | null>(null);
+  const [newAdminPassword, setNewAdminPassword] = useState('');
+  const [confirmAdminPassword, setConfirmAdminPassword] = useState('');
+  const [passwordStatusMsg, setPasswordStatusMsg] = useState<string | null>(null);
+  const [passwordSaving, setPasswordSaving] = useState(false);
 
   // Check login
   const handleAdminLogin = async (e: React.FormEvent) => {
@@ -57,11 +67,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
     setLoginError(null);
     setLoginLoading(true);
     try {
-      await api.adminLogin(secretKeyInput.trim());
+      await api.adminLogin(secretKeyInput.trim(), ownerEmailInput.trim());
       setIsAuthenticated(true);
       fetchAdminData();
     } catch (err: any) {
-      setLoginError(err.message || 'Incorrect Master Admin Key.');
+      setLoginError(err.message || 'Invalid Owner Gmail or Admin Secret Key.');
     } finally {
       setLoginLoading(false);
     }
@@ -89,8 +99,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
       setOverview(ov);
       setStudents(std.students);
       setPayments(pay.payments);
-      setCourse(crs.course);
-      setCourseForm(crs.course);
+      const nextCourses = crs.courses && crs.courses.length > 0 ? crs.courses : [crs.course];
+      setCourses(nextCourses);
+      const activeCourse = nextCourses.find(c => c.id === selectedCourseId) || nextCourses[0] || crs.course;
+      setCourse(activeCourse);
+      setCourseForm(activeCourse);
       setLessons(lsn.lessons);
       setAuditLogs(aud.logs);
       setSupportTickets(sup.tickets);
@@ -148,11 +161,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
     }
   };
 
+  const handleSelectAdminCourse = (courseId: string) => {
+    setSelectedCourseId(courseId);
+    const found = courses.find(c => c.id === courseId);
+    if (found) {
+      setCourse(found);
+      setCourseForm(found);
+    }
+  };
+
+  const courseLessons = lessons
+    .filter(l => (l.courseId || 'course-yt-01') === selectedCourseId)
+    .sort((a, b) => a.order - b.order);
+
+  const selectedCourseObj = courses.find(c => c.id === selectedCourseId) || course;
+
   const handleMoveLesson = async (index: number, direction: 'up' | 'down') => {
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= lessons.length) return;
+    if (targetIndex < 0 || targetIndex >= courseLessons.length) return;
 
-    const reordered = [...lessons];
+    const reordered = [...courseLessons];
     const [moved] = reordered.splice(index, 1);
     reordered.splice(targetIndex, 0, moved);
 
@@ -180,9 +208,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
     if (!selectedStudentForAction || !actionType) return;
     try {
       if (actionType === 'grant') {
-        await api.grantStudentAccess(selectedStudentForAction.id, grantReason);
+        await api.grantStudentAccess(selectedStudentForAction.id, grantReason, grantCourseId);
       } else {
-        await api.revokeStudentAccess(selectedStudentForAction.id, grantReason);
+        await api.revokeStudentAccess(
+          selectedStudentForAction.id,
+          grantReason,
+          grantCourseId === 'ALL' ? undefined : grantCourseId
+        );
       }
       setSelectedStudentForAction(null);
       setActionType(null);
@@ -257,10 +289,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
 
           <div className="space-y-1">
             <h2 className="font-brand font-black text-xl text-slate-900">
-              KP HUBE Owner Portal
+              KP HUBE Private Owner Login
             </h2>
             <p className="text-xs text-slate-500">
-              Role-Based Access Control: Enter your Master Admin Secret Key to manage the course.
+              Private website — sign in with your Owner Gmail &amp; Password (or Admin Key).
             </p>
           </div>
 
@@ -273,17 +305,49 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                Admin Master Secret Key
+                Owner Gmail Address
               </label>
               <input
-                type="password"
-                value={secretKeyInput}
-                onChange={(e) => setSecretKeyInput(e.target.value)}
-                placeholder="Enter your private Owner Admin Key"
+                type="email"
+                name="email"
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                value={ownerEmailInput}
+                onChange={(e) => setOwnerEmailInput(e.target.value)}
+                placeholder="Enter your Owner Gmail"
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-purple-600 focus:ring-2 focus:ring-purple-100 text-sm focus:outline-none"
-                autoFocus
+                autoFocus={!ownerEmailInput}
                 required
               />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                Password / Admin Secret Key
+              </label>
+              <div className="relative flex items-center">
+                <input
+                  type={showSecretKey ? 'text' : 'password'}
+                  name="password"
+                  autoComplete="current-password"
+                  value={secretKeyInput}
+                  onChange={(e) => setSecretKeyInput(e.target.value)}
+                  placeholder="Enter your Password or Admin Key"
+                  className="w-full px-3.5 py-2.5 pr-10 rounded-xl border border-slate-300 focus:border-purple-600 focus:ring-2 focus:ring-purple-100 text-sm focus:outline-none"
+                  autoFocus={Boolean(ownerEmailInput)}
+                  required
+                />
+                <button
+                  type="button"
+                  aria-label={showSecretKey ? 'Hide password' : 'Show password'}
+                  onClick={() => setShowSecretKey(!showSecretKey)}
+                  className="absolute right-3 text-slate-400 hover:text-slate-700"
+                >
+                  {showSecretKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
 
             <div className="flex gap-2">
@@ -292,14 +356,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
                 onClick={onExit}
                 className="flex-1 h-11 rounded-xl border border-slate-200 text-slate-700 font-semibold text-xs hover:bg-slate-50 transition-colors"
               >
-                Back to App
+                Public Site
               </button>
               <button
                 type="submit"
-                disabled={loginLoading || !secretKeyInput.trim()}
-                className="flex-1 h-11 rounded-xl bg-purple-800 hover:bg-purple-900 text-white font-semibold text-xs shadow-md shadow-purple-800/20 transition-all flex items-center justify-center"
+                disabled={loginLoading || !ownerEmailInput.trim() || !secretKeyInput.trim()}
+                className="flex-1 h-11 rounded-xl bg-purple-800 hover:bg-purple-900 disabled:opacity-50 text-white font-semibold text-xs shadow-md shadow-purple-800/20 transition-all flex items-center justify-center"
               >
-                {loginLoading ? 'Verifying...' : 'Unlock Portal'}
+                {loginLoading ? 'Verifying...' : 'Sign In'}
               </button>
             </div>
           </form>
@@ -442,8 +506,72 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
               <span className="font-brand font-black text-2xl text-purple-700 mt-1 block">
                 {overview.publishedLessons} / {overview.totalLessons}
               </span>
-              <span className="text-[10px] text-slate-500">Roman Hindi Curriculum</span>
+              <span className="text-[10px] text-slate-500">Video Course Curriculum</span>
             </div>
+          </div>
+
+          {/* Recent Course Purchases & Enrollment History */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="font-brand font-bold text-sm text-slate-900">
+                  Recent Course Purchases &amp; Enrollment History
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  All UPI orders, verified receipts, and active student enrollments on this server
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('payments')}
+                className="text-xs font-semibold text-purple-700 hover:underline shrink-0"
+              >
+                View All ({payments.length})
+              </button>
+            </div>
+
+            {payments.length === 0 ? (
+              <div className="p-4 bg-slate-50 rounded-xl text-xs text-slate-500 text-center">
+                No purchase records saved on this server yet. When a student pays ₹{overview.coursePrice || 49} and submits their UTR (or is granted access in Students Roster), their purchase history appears here.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {payments.slice(0, 5).map(p => (
+                  <div
+                    key={p.id}
+                    className="p-3 rounded-xl border border-slate-100 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-slate-900">{p.studentName || 'Creator Student'}</span>
+                        <span className="font-mono text-slate-500 text-[11px]">
+                          {p.studentPhone?.includes('@') ? p.studentPhone : `+91 ${p.studentPhone}`}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          p.status === 'paid' ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'
+                        }`}>
+                          {p.status.toUpperCase()}
+                        </span>
+                        {p.courseTitle && (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-800 border border-purple-200/70">
+                            {p.courseTitle}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500 font-mono mt-0.5 truncate">
+                        {p.receiptNumber} {p.paymentId ? `• UTR/Ref: ${p.paymentId}` : '• Awaiting UTR verification'}
+                      </p>
+                    </div>
+                    <div className="text-left sm:text-right shrink-0">
+                      <span className="font-brand font-bold text-slate-900 block">₹{p.amount}</span>
+                      <span className="text-[10px] text-slate-400">
+                        {new Date(p.timestamp).toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Quick Status Cards */}
@@ -497,16 +625,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
       {/* ================= TAB 2: LESSONS MANAGER ================= */}
       {activeTab === 'lessons' && (
         <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-4">
+          {courses.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 pb-3 border-b border-slate-100">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mr-1">
+                Select Course:
+              </span>
+              {courses.map(c => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => handleSelectAdminCourse(c.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                    selectedCourseId === c.id
+                      ? c.isMain
+                        ? 'bg-purple-900 text-amber-300 border-amber-400/50 shadow-xs'
+                        : 'bg-purple-700 text-white border-purple-700 shadow-xs'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  {c.isMain ? 'VIP Course (Main)' : c.title} • ₹{c.price}
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
             <div>
-              <h2 className="font-brand font-bold text-lg text-slate-900">{lessons.length} Course Episodes Manager</h2>
+              <h2 className="font-brand font-bold text-lg text-slate-900">
+                {selectedCourseObj?.title || 'Course'} — {courseLessons.length} Episodes
+              </h2>
               <p className="text-xs text-slate-500">Upload video links (YouTube, Google Drive, or MP4), attach PDFs, reorder, or edit episode titles</p>
             </div>
             <button
               onClick={() => {
                 setIsNewLesson(true);
                 setEditingLesson({
-                  title: `Episode ${lessons.length + 1}`,
+                  courseId: selectedCourseId,
+                  title: `Episode ${courseLessons.length + 1}`,
                   englishSubtitle: '',
                   description: '',
                   durationMinutes: 0,
@@ -716,7 +871,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
 
           {/* Lessons List Table */}
           <div className="space-y-2">
-            {lessons.map((lesson, idx) => (
+            {courseLessons.map((lesson, idx) => (
               <div
                 key={lesson.id}
                 className="p-3.5 rounded-xl border border-slate-200 hover:border-slate-300 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
@@ -732,7 +887,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
                     </button>
                     <button
                       onClick={() => handleMoveLesson(idx, 'down')}
-                      disabled={idx === lessons.length - 1}
+                      disabled={idx === courseLessons.length - 1}
                       className="p-1 hover:bg-slate-100 disabled:opacity-20 rounded text-slate-500"
                     >
                       <ArrowDown className="w-3 h-3" />
@@ -830,6 +985,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
                 </p>
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
+                    Select Target Course:
+                  </label>
+                  <select
+                    value={grantCourseId}
+                    onChange={(e) => setGrantCourseId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white focus:outline-none"
+                  >
+                    {courses.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.isMain ? `★ ${c.title}` : c.title} (₹{c.price})
+                      </option>
+                    ))}
+                    {actionType === 'revoke' && (
+                      <option value="ALL">All Courses (Full Revoke)</option>
+                    )}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
                     Audit Note / Reason (Required):
                   </label>
                   <input
@@ -867,61 +1041,93 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
               <thead>
                 <tr className="border-b border-slate-200 text-slate-500 text-left font-semibold">
                   <th className="py-2.5 px-3">Student Name / Phone</th>
-                  <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 px-3">Unlocked Courses</th>
                   <th className="py-2.5 px-3">Progress</th>
                   <th className="py-2.5 px-3">Joined Date</th>
                   <th className="py-2.5 px-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {students.map(s => (
-                  <tr key={s.id} className="hover:bg-slate-50">
-                    <td className="py-3 px-3">
-                      <div className="font-semibold text-slate-900">{s.name || 'Student Creator'}</div>
-                      <div className="font-mono text-slate-500 text-[11px]">
-                        {s.email || (s.phone ? `+91 ${s.phone}` : s.id)}
-                      </div>
-                    </td>
-                    <td className="py-3 px-3">
-                      {s.isEnrolled ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Active Enrolled
-                        </span>
-                      ) : (
-                        <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
-                          Unpaid
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-3 font-mono">
-                      {s.completedLessonIds.length} / {lessons.length}
-                    </td>
-                    <td className="py-3 px-3 text-slate-500">
-                      {new Date(s.createdAt).toLocaleDateString('en-IN', {
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric'
-                      })}
-                    </td>
-                    <td className="py-3 px-3 text-right">
-                      {s.isEnrolled ? (
-                        <button
-                          onClick={() => { setSelectedStudentForAction(s); setActionType('revoke'); }}
-                          className="px-2.5 py-1 text-[11px] font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg border border-rose-200"
-                        >
-                          Revoke Access
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => { setSelectedStudentForAction(s); setActionType('grant'); }}
-                          className="px-2.5 py-1 text-[11px] font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg border border-purple-200"
-                        >
-                          Grant Access
-                        </button>
-                      )}
+                {students.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-8 px-3 text-center text-slate-500">
+                      No registered student accounts found on this server yet.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  students.map(s => {
+                    const studentCourses = s.enrolledCourseIds && s.enrolledCourseIds.length > 0
+                      ? s.enrolledCourseIds
+                      : s.isEnrolled
+                        ? ['course-yt-01']
+                        : [];
+                    return (
+                    <tr key={s.id} className="hover:bg-slate-50">
+                      <td className="py-3 px-3">
+                        <div className="font-semibold text-slate-900">{s.name || 'Student Creator'}</div>
+                        <div className="font-mono text-slate-500 text-[11px]">
+                          {s.email || (s.phone ? `+91 ${s.phone}` : s.id)}
+                        </div>
+                      </td>
+                      <td className="py-3 px-3">
+                        {studentCourses.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {studentCourses.map(cId => {
+                              const cObj = courses.find(c => c.id === cId);
+                              return (
+                                <span key={cId} className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                  {cObj ? (cObj.isMain ? 'VIP Course' : `₹${cObj.price} ${cObj.title.split(' ').slice(0, 3).join(' ')}`) : cId}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                            Unpaid
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-3 font-mono">
+                        {s.completedLessonIds.length} / {lessons.length}
+                      </td>
+                      <td className="py-3 px-3 text-slate-500">
+                        {new Date(s.createdAt).toLocaleDateString('en-IN', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric'
+                        })}
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        <div className="inline-flex items-center gap-1.5">
+                          <button
+                            onClick={() => {
+                              setGrantCourseId(selectedCourseId || courses[0]?.id || 'course-vip-01');
+                              setSelectedStudentForAction(s);
+                              setActionType('grant');
+                            }}
+                            className="px-2.5 py-1 text-[11px] font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg border border-purple-200"
+                          >
+                            Grant Course
+                          </button>
+                          {s.isEnrolled && (
+                            <button
+                              onClick={() => {
+                                setGrantCourseId(studentCourses[0] || 'ALL');
+                                setSelectedStudentForAction(s);
+                                setActionType('revoke');
+                              }}
+                              className="px-2.5 py-1 text-[11px] font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg border border-rose-200"
+                            >
+                              Revoke
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
@@ -934,43 +1140,55 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
           <div className="flex items-center justify-between border-b border-slate-100 pb-4">
             <div>
               <h2 className="font-brand font-bold text-lg text-slate-900">Payment Ledger & Audit Trail</h2>
-              <p className="text-xs text-slate-500">Cryptographically verified orders and fraud prevention logs</p>
+              <p className="text-xs text-slate-500">Verified UPI orders, receipts, and purchase history</p>
             </div>
             <span className="text-xs font-semibold text-slate-600 font-mono">
               {payments.length} Transactions
             </span>
           </div>
 
-          <div className="space-y-3">
-            {payments.map(p => (
-              <div key={p.id} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 text-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono font-bold text-slate-900">₹{p.amount}</span>
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                      p.status === 'paid' ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'
-                    }`}>
-                      {p.status.toUpperCase()}
-                    </span>
-                    <span className="text-slate-400">·</span>
-                    <span className="font-mono text-slate-600">
-                      {p.studentPhone?.includes('@') ? p.studentPhone : `+91 ${p.studentPhone}`}
-                    </span>
+          {payments.length === 0 ? (
+            <div className="p-6 bg-slate-50 rounded-2xl text-center text-xs text-slate-500">
+              No payment orders or purchases recorded on this server yet.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {payments.map(p => (
+                <div key={p.id} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 text-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono font-bold text-slate-900">₹{p.amount}</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        p.status === 'paid' ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'
+                      }`}>
+                        {p.status.toUpperCase()}
+                      </span>
+                      <span className="text-slate-400">·</span>
+                      <span className="font-semibold text-slate-800">{p.studentName || 'Student'}</span>
+                      <span className="font-mono text-slate-600">
+                        ({p.studentPhone?.includes('@') ? p.studentPhone : `+91 ${p.studentPhone}`})
+                      </span>
+                      {p.courseTitle && (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-800 border border-purple-200/70">
+                          {p.courseTitle}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-slate-500 font-mono mt-0.5">
+                      Order: {p.orderId} {p.paymentId ? `| Gateway Ref: ${p.paymentId}` : ''}
+                    </div>
                   </div>
-                  <div className="text-[11px] text-slate-500 font-mono mt-0.5">
-                    Order: {p.orderId} {p.paymentId ? `| Gateway Ref: ${p.paymentId}` : ''}
-                  </div>
-                </div>
 
-                <div className="text-right text-[11px] text-slate-400">
-                  <span>{new Date(p.timestamp).toLocaleString('en-IN')}</span>
-                  {p.receiptNumber && (
-                    <span className="block font-mono text-purple-700 font-semibold">{p.receiptNumber}</span>
-                  )}
+                  <div className="text-right text-[11px] text-slate-400">
+                    <span>{new Date(p.timestamp).toLocaleString('en-IN')}</span>
+                    {p.receiptNumber && (
+                      <span className="block font-mono text-purple-700 font-semibold">{p.receiptNumber}</span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
 
           {/* Audit Logs list */}
           <div className="pt-4 border-t border-slate-100">
@@ -994,9 +1212,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
       {/* ================= TAB 5: COURSE SETTINGS & FOUNDER ================= */}
       {activeTab === 'course' && (
         <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-4">
+          {courses.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 pb-3 border-b border-slate-100">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mr-1">
+                Editing Course:
+              </span>
+              {courses.map(c => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => handleSelectAdminCourse(c.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                    selectedCourseId === c.id
+                      ? c.isMain
+                        ? 'bg-purple-900 text-amber-300 border-amber-400/50 shadow-xs'
+                        : 'bg-purple-700 text-white border-purple-700 shadow-xs'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  {c.isMain ? 'VIP Course (Main)' : c.title} • ₹{c.price}
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="border-b border-slate-100 pb-3">
-            <h2 className="font-brand font-bold text-lg text-slate-900">Course & Founder Settings</h2>
-            <p className="text-xs text-slate-500">Configure course price (default ₹49), description, and founder portrait</p>
+            <h2 className="font-brand font-bold text-lg text-slate-900">
+              {selectedCourseObj?.isMain ? 'VIP Main Course Settings' : 'Course & Founder Settings'}
+            </h2>
+            <p className="text-xs text-slate-500">
+              Configure course price, badge, description, and founder portrait for <strong>{selectedCourseObj?.title}</strong>
+            </p>
           </div>
 
           {saveSuccessMsg && (
@@ -1031,7 +1277,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Selling Price (INR ₹)</label>
                 <input
@@ -1053,6 +1299,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
                   onChange={(e) => setCourseForm({ ...courseForm, originalPrice: Number(e.target.value) })}
                   className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none"
                   required
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Course Badge Label</label>
+                <input
+                  type="text"
+                  value={courseForm.badge || ''}
+                  onChange={(e) => setCourseForm({ ...courseForm, badge: e.target.value })}
+                  placeholder="e.g. VIP MAIN COURSE"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none font-bold uppercase"
                 />
               </div>
             </div>
@@ -1135,6 +1392,76 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, onRefres
                 />
               </label>
             </div>
+          </div>
+
+          {/* Private Admin Website Password Setup */}
+          <div className="pt-5 border-t border-slate-200 space-y-3">
+            <div>
+              <h3 className="font-brand font-bold text-sm text-slate-900">Private Admin Login Password</h3>
+              <p className="text-[11px] text-slate-500">
+                Set or update a personal password for signing in to this private Admin website alongside your Owner Gmail.
+              </p>
+            </div>
+            {passwordStatusMsg && (
+              <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800">
+                {passwordStatusMsg}
+              </div>
+            )}
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setPasswordStatusMsg(null);
+                if (newAdminPassword.length < 6) {
+                  setAdminToast({ type: 'error', text: 'Password must be at least 6 characters long.' });
+                  return;
+                }
+                if (newAdminPassword !== confirmAdminPassword) {
+                  setAdminToast({ type: 'error', text: 'Passwords do not match.' });
+                  return;
+                }
+                setPasswordSaving(true);
+                try {
+                  const res = await api.updateAdminPassword(newAdminPassword);
+                  setNewAdminPassword('');
+                  setConfirmAdminPassword('');
+                  setPasswordStatusMsg(res.message);
+                  setAdminToast({ type: 'success', text: res.message });
+                } catch (err: any) {
+                  setAdminToast({ type: 'error', text: err.message || 'Failed to update password' });
+                } finally {
+                  setPasswordSaving(false);
+                }
+              }}
+              className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs"
+            >
+              <input
+                type="password"
+                autoComplete="new-password"
+                minLength={6}
+                value={newAdminPassword}
+                onChange={(e) => setNewAdminPassword(e.target.value)}
+                placeholder="New Admin Password (min 6 chars)"
+                className="px-3 py-2 rounded-xl border border-slate-300 focus:border-purple-600 focus:outline-none"
+                required
+              />
+              <input
+                type="password"
+                autoComplete="new-password"
+                minLength={6}
+                value={confirmAdminPassword}
+                onChange={(e) => setConfirmAdminPassword(e.target.value)}
+                placeholder="Confirm New Password"
+                className="px-3 py-2 rounded-xl border border-slate-300 focus:border-purple-600 focus:outline-none"
+                required
+              />
+              <button
+                type="submit"
+                disabled={passwordSaving}
+                className="px-4 py-2 bg-purple-700 hover:bg-purple-800 disabled:opacity-50 text-white font-semibold rounded-xl transition-colors"
+              >
+                {passwordSaving ? 'Saving...' : 'Save Admin Password'}
+              </button>
+            </form>
           </div>
         </div>
       )}

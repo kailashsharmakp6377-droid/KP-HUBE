@@ -110,7 +110,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
             <tbody className="divide-y divide-slate-100">
               <tr>
                 <td className="py-3">
-                  <div className="font-semibold text-slate-900">{course?.title || 'KP HUBE Complete YouTube Course'}</div>
+                  <div className="font-semibold text-slate-900">{payment.courseTitle || course?.title || 'KP HUBE Complete YouTube Course'}</div>
                   <div className="text-[11px] text-slate-500">{episodeCount} Video Episodes • Lifetime App Access</div>
                 </td>
                 <td className="py-3 text-center">1</td>

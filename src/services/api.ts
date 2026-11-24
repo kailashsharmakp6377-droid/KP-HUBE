@@ -70,15 +70,17 @@ function getHeaders(isAdmin = false): HeadersInit {
 
 export const api = {
   // Course
-  async getCourse(): Promise<{ course: Course; totalLessons: number }> {
-    const res = await fetch(apiUrl('/api/course'));
+  async getCourse(courseId?: string): Promise<{ course: Course; courses?: Course[]; totalLessons: number }> {
+    const q = courseId ? `?courseId=${encodeURIComponent(courseId)}` : '';
+    const res = await fetch(apiUrl(`/api/course${q}`), { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to load course details');
     return res.json();
   },
 
   // Lessons (Server automatically censors locked videos for non-enrolled students)
-  async getLessons(): Promise<{ lessons: Lesson[]; isEnrolled: boolean; studentPhone?: string }> {
-    const res = await fetch(apiUrl('/api/lessons'), { headers: getHeaders() });
+  async getLessons(courseId?: string): Promise<{ lessons: Lesson[]; isEnrolled: boolean; enrolledCourseIds?: string[]; studentPhone?: string }> {
+    const q = courseId ? `?courseId=${encodeURIComponent(courseId)}` : '';
+    const res = await fetch(apiUrl(`/api/lessons${q}`), { headers: getHeaders(), cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch lessons');
     return res.json();
   },
@@ -137,7 +139,7 @@ export const api = {
   },
 
   async getMe(): Promise<{ student: Student }> {
-    const res = await fetch(apiUrl('/api/auth/me'), { headers: getHeaders() });
+    const res = await fetch(apiUrl('/api/auth/me'), { headers: getHeaders(), cache: 'no-store' });
     if (!res.ok) throw new Error('Not logged in');
     return res.json();
   },
@@ -166,22 +168,28 @@ export const api = {
   },
 
   // Payments
-  async getUpiStatus(): Promise<{
+  async getUpiStatus(courseId?: string): Promise<{
     verifiedPayeeName: string;
     verifiedUpiVpa: string;
     courseAmount: number;
     hasLiveGatewayKeys: boolean;
     razorpayKeyId: string;
     mismatchedQrBlocked: boolean;
+    upiQuery?: string;
+    upiIntentUrl?: string;
   }> {
-    const res = await fetch(apiUrl('/api/payment/upi-status'));
+    const query = courseId ? `?courseId=${encodeURIComponent(courseId)}` : '';
+    const res = await fetch(apiUrl(`/api/payment/upi-status${query}`), { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch payment status');
     return res.json();
   },
 
-  async createOrder(): Promise<{
+  async createOrder(courseId?: string): Promise<{
     success: boolean;
     orderId: string;
+    razorpayOrderId?: string;
+    hasLiveGatewayKeys?: boolean;
+    courseId?: string;
     amount: number;
     amountRupees: number;
     currency: string;
@@ -192,11 +200,13 @@ export const api = {
     studentName: string;
     qrImageUrl?: string;
     upiVpa?: string;
+    upiQuery?: string;
     upiIntentUrl?: string;
   }> {
     const res = await fetch(apiUrl('/api/payment/create-order'), {
       method: 'POST',
-      headers: getHeaders()
+      headers: getHeaders(),
+      body: JSON.stringify(courseId ? { courseId } : {})
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Order creation failed');
@@ -237,16 +247,27 @@ export const api = {
     return data;
   },
 
-  // Admin (Requires BOTH verified Owner session & private Admin Key)
-  async adminLogin(secretKey: string): Promise<{ success: boolean; adminToken: string }> {
+  // Admin (Requires BOTH Owner Gmail & Owner Password / Admin Secret Key)
+  async adminLogin(credential: string, email?: string): Promise<{ success: boolean; adminToken: string; portalPath?: string }> {
     const res = await fetch(apiUrl('/api/admin/login'), {
       method: 'POST',
       headers: getHeaders(false),
-      body: JSON.stringify({ secretKey })
+      body: JSON.stringify({ email, password: credential, secretKey: credential })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Admin verification failed');
     storage.setAdminToken(data.adminToken);
+    return data;
+  },
+
+  async updateAdminPassword(newPassword: string): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(apiUrl('/api/admin/password'), {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ newPassword })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to update admin password');
     return data;
   },
 
@@ -271,22 +292,22 @@ export const api = {
     return res.json();
   },
 
-  async grantStudentAccess(studentId: string, reason: string): Promise<{ success: boolean; student: Student }> {
+  async grantStudentAccess(studentId: string, reason: string, courseId?: string): Promise<{ success: boolean; student: Student }> {
     const res = await fetch(apiUrl(`/api/admin/students/${studentId}/grant`), {
       method: 'POST',
       headers: getHeaders(true),
-      body: JSON.stringify({ reason })
+      body: JSON.stringify({ reason, ...(courseId ? { courseId } : {}) })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to grant access');
     return data;
   },
 
-  async revokeStudentAccess(studentId: string, reason: string): Promise<{ success: boolean; student: Student }> {
+  async revokeStudentAccess(studentId: string, reason: string, courseId?: string): Promise<{ success: boolean; student: Student }> {
     const res = await fetch(apiUrl(`/api/admin/students/${studentId}/revoke`), {
       method: 'POST',
       headers: getHeaders(true),
-      body: JSON.stringify({ reason })
+      body: JSON.stringify({ reason, ...(courseId ? { courseId } : {}) })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to revoke access');
@@ -299,7 +320,7 @@ export const api = {
     return res.json();
   },
 
-  async updateCourse(updates: Partial<Course>): Promise<{ success: boolean; course: Course }> {
+  async updateCourse(updates: Partial<Course>): Promise<{ success: boolean; course: Course; courses?: Course[] }> {
     const res = await fetch(apiUrl('/api/admin/course'), {
       method: 'PUT',
       headers: getHeaders(true),
@@ -394,7 +415,7 @@ export const api = {
   },
 
   async getApkStatus(): Promise<{ available: boolean; filename: string; downloadUrl: string | null; source: string }> {
-    const res = await fetch(apiUrl('/api/apk/status'));
+    const res = await fetch(apiUrl('/api/apk/status'), { cache: 'no-store' });
     if (!res.ok) return { available: false, filename: 'KP-HUBE.apk', downloadUrl: null, source: 'none' };
     return res.json();
   },

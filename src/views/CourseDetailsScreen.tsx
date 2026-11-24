@@ -1,26 +1,64 @@
 import React from 'react';
-import { Lock, PlayCircle, Clock, FileText, CheckCircle, AlertCircle, ArrowRight, ShieldCheck, Sparkles } from 'lucide-react';
+import { Lock, PlayCircle, Clock, FileText, AlertCircle, ShieldCheck, Sparkles, Crown } from 'lucide-react';
 import type { Course, Lesson, Student } from '../types/index.ts';
 
 interface CourseDetailsScreenProps {
   course: Course;
+  courses?: Course[];
+  onSelectCourse?: (courseId: string) => void;
   lessons: Lesson[];
   student: Student | null;
+  isEnrolled?: boolean;
   onOpenPayment: () => void;
   onOpenLesson: (lesson: Lesson) => void;
 }
 
 export const CourseDetailsScreen: React.FC<CourseDetailsScreenProps> = ({
   course,
+  courses,
+  onSelectCourse,
   lessons,
   student,
+  isEnrolled: isEnrolledProp,
   onOpenPayment,
   onOpenLesson
 }) => {
-  const isEnrolled = student?.isEnrolled || false;
+  const isEnrolled = isEnrolledProp ?? (student?.isEnrolled || false);
+  const allCourses = courses && courses.length > 0 ? courses : [course];
 
   return (
     <div className="space-y-6 pb-28 animate-fade-in">
+      {/* 0. Course Switcher Bar */}
+      {allCourses.length > 1 && onSelectCourse && (
+        <div className="flex flex-wrap gap-2 bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200/80">
+          {allCourses.map((c) => {
+            const active = c.id === course.id;
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => onSelectCourse(c.id)}
+                className={`flex-1 min-w-[140px] px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                  active
+                    ? c.isMain
+                      ? 'bg-purple-900 text-amber-300 shadow-sm'
+                      : 'bg-white text-purple-900 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                {c.isMain && <Crown className="w-3.5 h-3.5 shrink-0" />}
+                <span className="truncate">{c.isMain ? 'VIP Course' : c.title.replace('KP HUBE ', '')}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                  active ? 'bg-black/15' : 'bg-slate-200 text-slate-700'
+                }`}>
+                  ₹{c.price}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* 1. Header Banner */}
       <section className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200/80">
         <div className="flex flex-col md:flex-row gap-6 items-start">
@@ -36,10 +74,10 @@ export const CourseDetailsScreen: React.FC<CourseDetailsScreenProps> = ({
             />
             <div className="absolute inset-0 bg-gradient-to-t from-purple-950/90 via-transparent to-transparent flex flex-col justify-end p-4 text-white">
               <span className="text-[10px] font-bold text-amber-300 uppercase tracking-widest">
-                KP HUBE
+                {course.isMain ? 'VIP MAIN COURSE' : 'KP HUBE'}
               </span>
               <span className="font-brand font-bold text-sm leading-tight">
-                Complete YouTube Course
+                {course.title}
               </span>
             </div>
           </div>
@@ -47,7 +85,7 @@ export const CourseDetailsScreen: React.FC<CourseDetailsScreenProps> = ({
           {/* Course Details Info */}
           <div className="space-y-3 flex-1">
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-              <span className="font-semibold text-purple-700">Official Course</span>
+              <span className="font-semibold text-purple-700">{course.badge || 'Official Course'}</span>
               <span aria-hidden="true">·</span>
               <span>{lessons.length || course.totalLessons} Video Episodes</span>
               <span aria-hidden="true">·</span>

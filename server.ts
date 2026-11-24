@@ -1,6 +1,5 @@
 import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
-import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -16,6 +15,12 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 
 app.use(cors());
 app.use(express.json());
+app.use('/api', (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
 
 // Path to persistent data storage & private owner files
 const DATA_DIR = path.resolve(process.cwd(), 'data');
@@ -38,6 +43,7 @@ interface StoredStudent extends Student {
 
 interface DatabaseSchema {
   course: Course;
+  courses?: Course[];
   lessons: Lesson[];
   students: StoredStudent[];
   payments: PaymentRecord[];
@@ -45,60 +51,97 @@ interface DatabaseSchema {
   supportTickets: SupportTicket[];
   otps: Record<string, { code: string; expiresAt: number }>;
   apkDownloadUrl?: string;
+  adminPasswordHash?: string;
 }
 
 const DEFAULT_COURSE: Course = {
   id: 'course-yt-01',
-  title: 'KP HUBE Complete YouTube Course',
+  title: 'KP HUBE YouTube Starter Course',
   tagline: 'LEARN • GROW • SUCCEED',
-  description: 'Learn how to start a YouTube channel, create videos, reach more viewers, and understand channel growth and monetization.',
+  description: 'Learn how to start a YouTube channel, create your first videos, reach real viewers, and understand channel growth basics across 5 focused episodes.',
   price: 49,
-  originalPrice: 1999,
+  originalPrice: 1499,
   bannerImage: '/assets/founder.jpg',
   founderName: 'KP HUBE Founder & Mentor',
   founderRole: 'YouTube Growth Specialist & Content Creator',
   founderBio: 'Dedicated to helping Indian aspiring creators build, monetize, and scale high-impact YouTube channels from scratch.',
-  announcement: 'Special inaugural batch access for just ₹49 one-time. Lifetime access included.',
+  announcement: 'Starter Batch Access for just ₹49 one-time — includes 5 Step-by-Step Episodes.',
   totalLessons: 5,
   enrolledCount: 142,
+  isMain: false,
+  badge: 'STARTER COURSE • ₹49',
   features: [
     '5 Step-by-Step Video Episodes',
     'Mobile-First Video Player with Speed Control',
-    'Shorts Viral Algorithm Framework',
-    'Monetization & Brand Sponsorship Guide',
-    'Direct Creator Community Access',
-    '90-Day Channel Growth Blueprint'
+    'Channel Setup & Niche Selection',
+    'First Video Upload & SEO Checklist',
+    'Direct Creator Community Access'
   ]
 };
 
-const DEFAULT_LESSONS: Lesson[] = [
-  {
-    id: 'episode-01',
-    order: 1,
-    title: 'Episode 1',
-    englishSubtitle: 'Course Preview — What You Will Learn',
-    description: 'Introduction to the KP HUBE Complete YouTube Course and what is included across all 5 episodes.',
-    durationMinutes: 1,
-    videoUrl: '/assets/episode-01-intro.mp4',
-    videoType: 'mp4',
-    isPublished: true,
-    isFreePreview: true
-  },
-  ...Array.from({ length: 4 }, (_, idx): Lesson => {
-    const num = idx + 2;
-    return {
-      id: `episode-${String(num).padStart(2, '0')}`,
-      order: num,
-      title: `Episode ${num}`,
-      englishSubtitle: '',
-      description: '',
-      durationMinutes: 0,
-      videoUrl: '',
-      videoType: 'awaiting_upload',
+const DEFAULT_VIP_COURSE: Course = {
+  id: 'course-vip-01',
+  title: 'VIP Course — KP HUBE Main Mastery',
+  tagline: 'MAIN VIP PROGRAM • LEARN • GROW • SUCCEED',
+  description: 'Our flagship 15-episode VIP Main Course for serious creators: complete channel architecture, viral retention mastery, high-RPM niche selection, brand deals, and monetization scaling.',
+  price: 299,
+  originalPrice: 2999,
+  bannerImage: '/assets/founder.jpg',
+  founderName: 'KP HUBE Founder & Mentor',
+  founderRole: 'YouTube Growth Specialist & Content Creator',
+  founderBio: 'Dedicated to helping Indian aspiring creators build, monetize, and scale high-impact YouTube channels from scratch.',
+  announcement: 'Main Flagship 15-Episode VIP Course (₹299) — complete creator roadmap with priority mentorship & lifetime updates.',
+  totalLessons: 15,
+  enrolledCount: 89,
+  isMain: true,
+  badge: 'VIP MAIN COURSE • ₹299',
+  features: [
+    '15 VIP Masterclass Episodes',
+    'High-RPM Niche & Channel Audit System',
+    'Viral Script & Retention Engineering',
+    'Brand Sponsorship & AdSense Scaling',
+    'Priority Creator Support Access',
+    'Lifetime VIP Updates & Notes'
+  ]
+};
+
+function createCourseEpisodes(courseId: string, prefix: string, previewTitle: string, episodeCount = 5): Lesson[] {
+  return [
+    {
+      id: `${prefix}-01`,
+      courseId,
+      order: 1,
+      title: 'Episode 1',
+      englishSubtitle: previewTitle,
+      description: `Course introduction and overview of everything included across all ${episodeCount} episodes.`,
+      durationMinutes: 1,
+      videoUrl: '/assets/episode-01-intro.mp4',
+      videoType: 'mp4',
       isPublished: true,
-      isFreePreview: false
-    };
-  })
+      isFreePreview: true
+    },
+    ...Array.from({ length: Math.max(0, episodeCount - 1) }, (_, idx): Lesson => {
+      const num = idx + 2;
+      return {
+        id: `${prefix}-${String(num).padStart(2, '0')}`,
+        courseId,
+        order: num,
+        title: `Episode ${num}`,
+        englishSubtitle: '',
+        description: '',
+        durationMinutes: 0,
+        videoUrl: '',
+        videoType: 'awaiting_upload',
+        isPublished: true,
+        isFreePreview: false
+      };
+    })
+  ];
+}
+
+const DEFAULT_LESSONS: Lesson[] = [
+  ...createCourseEpisodes('course-vip-01', 'vip-episode', 'VIP Course Preview — 15-Episode Main Creator Mastery', 15),
+  ...createCourseEpisodes('course-yt-01', 'episode', 'Starter Course Preview — What You Will Learn', 5)
 ];
 
 function isLegacyUntouched14Lessons(lessons: unknown): boolean {
@@ -116,6 +159,117 @@ function isLegacyHindi12Episodes(lessons: unknown): boolean {
   );
 }
 
+function ensureCoursesAndLessons(baseCourse: Course, parsedCourses: Course[] | undefined, baseLessons: Lesson[]): { courses: Course[]; lessons: Lesson[]; migrated: boolean } {
+  let migrated = false;
+  let lessons: Lesson[] = baseLessons
+    .filter(l => {
+      if (l.courseId === 'course-yt-02') {
+        migrated = true;
+        return false;
+      }
+      return true;
+    })
+    .map(l => {
+      if (!l.courseId) {
+        migrated = true;
+        return { ...l, courseId: 'course-yt-01' };
+      }
+      return l;
+    });
+
+  let courses: Course[] = Array.isArray(parsedCourses) && parsedCourses.length > 0
+    ? parsedCourses
+        .filter(c => {
+          if (c.id === 'course-yt-02') {
+            migrated = true;
+            return false;
+          }
+          return true;
+        })
+        .map(c => ({ ...c }))
+    : [{ ...baseCourse, badge: baseCourse.badge || 'STARTER COURSE • ₹49', isMain: Boolean(baseCourse.isMain) }];
+
+  if (!Array.isArray(parsedCourses) || parsedCourses.length === 0) {
+    migrated = true;
+  }
+
+  if (!courses.some(c => c.id === 'course-vip-01')) {
+    courses.unshift({ ...DEFAULT_VIP_COURSE });
+    migrated = true;
+  } else {
+    const vipIdx = courses.findIndex(c => c.id === 'course-vip-01');
+    if (vipIdx >= 0) {
+      if (courses[vipIdx].price === 199) {
+        courses[vipIdx] = { ...courses[vipIdx], price: 299 };
+        migrated = true;
+      }
+      if (courses[vipIdx].badge === 'VIP MAIN COURSE') {
+        courses[vipIdx] = { ...courses[vipIdx], badge: DEFAULT_VIP_COURSE.badge };
+        migrated = true;
+      }
+      if (Array.isArray(courses[vipIdx].features) && courses[vipIdx].features[0] === '5 VIP Masterclass Episodes') {
+        courses[vipIdx] = {
+          ...courses[vipIdx],
+          description: DEFAULT_VIP_COURSE.description,
+          announcement: DEFAULT_VIP_COURSE.announcement,
+          features: [...DEFAULT_VIP_COURSE.features]
+        };
+        migrated = true;
+      }
+    }
+  }
+
+  // Ensure Course 1 has distinct name
+  const idx1 = courses.findIndex(c => c.id === 'course-yt-01');
+  if (idx1 >= 0 && courses[idx1].title === 'KP HUBE Complete YouTube Course') {
+    courses[idx1] = {
+      ...courses[idx1],
+      title: DEFAULT_COURSE.title,
+      badge: 'STARTER COURSE • ₹49',
+      announcement: DEFAULT_COURSE.announcement
+    };
+    migrated = true;
+  }
+
+  const vipLessons = lessons.filter(l => l.courseId === 'course-vip-01');
+  if (vipLessons.length === 0) {
+    lessons.push(...createCourseEpisodes('course-vip-01', 'vip-episode', 'VIP Course Preview — 15-Episode Main Creator Mastery', 15));
+    migrated = true;
+  } else if (
+    vipLessons.length === 5 &&
+    vipLessons.every(l => l.id.startsWith('vip-episode-')) &&
+    vipLessons.slice(1).every(l => !l.videoUrl)
+  ) {
+    if (vipLessons[0]) {
+      vipLessons[0].description = 'Course introduction and overview of everything included across all 15 episodes.';
+      vipLessons[0].englishSubtitle = 'VIP Course Preview — 15-Episode Main Creator Mastery';
+    }
+    for (let num = 6; num <= 15; num++) {
+      lessons.push({
+        id: `vip-episode-${String(num).padStart(2, '0')}`,
+        courseId: 'course-vip-01',
+        order: num,
+        title: `Episode ${num}`,
+        englishSubtitle: '',
+        description: '',
+        durationMinutes: 0,
+        videoUrl: '',
+        videoType: 'awaiting_upload',
+        isPublished: true,
+        isFreePreview: false
+      });
+    }
+    migrated = true;
+  }
+
+  courses = courses.map(c => ({
+    ...c,
+    totalLessons: lessons.filter(l => (l.courseId || 'course-yt-01') === c.id && l.isPublished).length || c.totalLessons
+  }));
+
+  return { courses, lessons, migrated };
+}
+
 function loadDatabase(): DatabaseSchema {
   try {
     if (fs.existsSync(DB_FILE)) {
@@ -127,7 +281,7 @@ function loadDatabase(): DatabaseSchema {
 
       if (isLegacyUntouched14Lessons(lessons) || isLegacyHindi12Episodes(lessons)) {
         lessons = DEFAULT_LESSONS;
-        course.totalLessons = DEFAULT_LESSONS.length;
+        course.totalLessons = 5;
         if (
           Array.isArray(course.features) &&
           course.features.length > 0 &&
@@ -146,15 +300,20 @@ function loadDatabase(): DatabaseSchema {
         migrated = true;
       }
 
+      const synced = ensureCoursesAndLessons(course, parsed.courses, lessons);
+      migrated = migrated || synced.migrated;
+
       const loaded: DatabaseSchema = {
-        course,
-        lessons,
+        course: synced.courses.find(c => c.id === 'course-yt-01') || synced.courses[0] || course,
+        courses: synced.courses,
+        lessons: synced.lessons,
         students: parsed.students || [],
         payments: parsed.payments || [],
         auditLogs: parsed.auditLogs || [],
         supportTickets: parsed.supportTickets || [],
         otps: parsed.otps || {},
-        apkDownloadUrl: parsed.apkDownloadUrl || ''
+        apkDownloadUrl: parsed.apkDownloadUrl || '',
+        adminPasswordHash: typeof parsed.adminPasswordHash === 'string' ? parsed.adminPasswordHash : undefined
       };
 
       if (migrated) {
@@ -168,6 +327,7 @@ function loadDatabase(): DatabaseSchema {
 
   const initialDb: DatabaseSchema = {
     course: DEFAULT_COURSE,
+    courses: [DEFAULT_VIP_COURSE, DEFAULT_COURSE],
     lessons: DEFAULT_LESSONS,
     students: [],
     payments: [],
@@ -176,9 +336,9 @@ function loadDatabase(): DatabaseSchema {
         id: 'log-init',
         action: 'COURSE_INITIALIZED',
         adminPhone: 'system',
-        targetId: 'course-yt-01',
+        targetId: 'course-vip-01',
         targetType: 'course',
-        details: 'KP HUBE Complete YouTube Course initialized with 5 video episodes.',
+        details: 'KP HUBE initialized with VIP Main Course (₹299, 15 episodes) and Starter Course (₹49, 5 episodes).',
         timestamp: new Date().toISOString()
       }
     ],
@@ -224,13 +384,15 @@ function loadOrCreateAdminSecret(): string {
 
 const ADMIN_SECRET = loadOrCreateAdminSecret();
 const OWNER_EMAIL = (process.env.OWNER_EMAIL || 'kpattitudeshort@gmail.com').trim().toLowerCase();
-const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || '';
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || 'kphube_mock_secret_key_2026';
-const UPI_MERCHANT_VPA = process.env.UPI_MERCHANT_VPA || 'kailash100k@axl';
-const UPI_MERCHANT_NAME = process.env.UPI_MERCHANT_NAME || 'KP HUBE';
+const PRIVATE_ADMIN_PATH = (process.env.ADMIN_PORTAL_PATH || '/kp-owner-studio-9472').trim();
+const RAZORPAY_KEY_ID = (process.env.RAZORPAY_KEY_ID || '').trim();
+const RAZORPAY_KEY_SECRET = (process.env.RAZORPAY_KEY_SECRET || 'kphube_mock_secret_key_2026').trim();
+const RAW_UPI_VPA = (process.env.UPI_MERCHANT_VPA || 'kailash100k@axl').trim();
+const UPI_MERCHANT_VPA = RAW_UPI_VPA.endsWith('@ax') ? `${RAW_UPI_VPA}l` : RAW_UPI_VPA;
+const UPI_MERCHANT_NAME = (process.env.UPI_MERCHANT_NAME || 'KP HUBE').trim();
 
 // Ephemeral in-memory owner admin sessions + brute-force lockout
-const adminSessions = new Map<string, { studentId: string; expiresAt: number }>();
+const adminSessions = new Map<string, { ownerEmail: string; expiresAt: number }>();
 const adminFailedAttempts = new Map<string, { count: number; lockedUntil: number }>();
 const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const ADMIN_LOCKOUT_MS = 15 * 60 * 1000;
@@ -285,10 +447,43 @@ function verifyPassword(password: string, storedHash?: string): boolean {
   return crypto.timingSafeEqual(keyBuf, derivedBuf);
 }
 
+function getStudentEnrolledCourses(student: StoredStudent | null | undefined): string[] {
+  if (!student) return [];
+  const list = Array.isArray(student.enrolledCourseIds) ? [...student.enrolledCourseIds] : [];
+  if (student.isEnrolled && list.length === 0) {
+    list.push('course-yt-01');
+  }
+  return list;
+}
+
+function isStudentEnrolledInCourse(student: StoredStudent | null | undefined, courseId: string): boolean {
+  if (!student) return false;
+  return getStudentEnrolledCourses(student).includes(courseId);
+}
+
+function getAllCourses(): Course[] {
+  if (Array.isArray(db.courses) && db.courses.length > 0) {
+    return db.courses;
+  }
+  return [db.course];
+}
+
+function findCourseById(courseId?: string): Course {
+  const courses = getAllCourses();
+  if (courseId) {
+    const match = courses.find(c => c.id === courseId);
+    if (match) return match;
+  }
+  return courses.find(c => c.isMain) || db.course || courses[0];
+}
+
 function sanitizeStudent(student: StoredStudent): Student {
   const { passwordHash: _ignored, ...safeStudent } = student;
+  const enrolledCourseIds = getStudentEnrolledCourses(student);
   return {
     ...safeStudent,
+    enrolledCourseIds,
+    isEnrolled: Boolean(student.isEnrolled || enrolledCourseIds.length > 0),
     isOwner: Boolean(student.email && student.email.toLowerCase() === OWNER_EMAIL)
   };
 }
@@ -341,20 +536,19 @@ function getStudentFromReq(req: Request): StoredStudent | null {
   return db.students.find(s => s.id === studentId) || null;
 }
 
-// Admin RBAC middleware: requires BOTH verified Owner session AND valid ephemeral admin session token
+// Admin RBAC middleware: requires valid ephemeral admin session token issued after Owner Gmail + Secret Key check
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  const student = getStudentFromReq(req);
-  if (!student || !student.email || student.email.toLowerCase() !== OWNER_EMAIL) {
-    res.status(403).json({ error: 'Unauthorized: Owner account required.' });
-    return;
-  }
   const adminToken = String(req.headers['x-admin-token'] || '');
   const session = adminSessions.get(adminToken);
-  if (!session || session.studentId !== student.id || session.expiresAt < Date.now()) {
+  if (
+    !session ||
+    canonicalEmail(session.ownerEmail) !== canonicalEmail(OWNER_EMAIL) ||
+    session.expiresAt < Date.now()
+  ) {
     if (session && session.expiresAt < Date.now()) {
       adminSessions.delete(adminToken);
     }
-    res.status(403).json({ error: 'Unauthorized: Admin verification required.' });
+    res.status(403).json({ error: 'Unauthorized: Owner Gmail & Admin Secret Key verification required.' });
     return;
   }
   next();
@@ -583,27 +777,41 @@ app.post('/api/auth/delete-account', (req, res) => {
 
 // ==================== COURSE & LESSON ROUTES ====================
 
-// Get course public info
-app.get('/api/course', (_req, res) => {
+// Get course public info (returns all courses + active course)
+app.get('/api/course', (req, res) => {
+  const requestedId = typeof req.query.courseId === 'string' ? req.query.courseId.trim() : undefined;
+  const courses = getAllCourses().map(c => ({
+    ...c,
+    totalLessons: db.lessons.filter(l => (l.courseId || 'course-yt-01') === c.id && l.isPublished).length || c.totalLessons
+  }));
+  const activeCourse =
+    (requestedId ? courses.find(c => c.id === requestedId) : undefined) ||
+    courses.find(c => c.isMain) ||
+    courses[0] ||
+    db.course;
+
   res.json({
-    course: db.course,
-    totalLessons: db.lessons.filter(l => l.isPublished).length
+    course: activeCourse,
+    courses,
+    totalLessons: db.lessons.filter(l => (l.courseId || 'course-yt-01') === activeCourse.id && l.isPublished).length
   });
 });
 
-// Get lessons (locked state enforced server-side for unpaid users)
+// Get lessons (locked state enforced server-side per course for unpaid users)
 app.get('/api/lessons', (req, res) => {
   const student = getStudentFromReq(req);
-  const isEnrolled = student?.isEnrolled || false;
+  const requestedCourseId = typeof req.query.courseId === 'string' ? req.query.courseId.trim() : undefined;
 
   const sanitizedLessons = db.lessons
-    .filter(l => l.isPublished)
+    .filter(l => l.isPublished && (!requestedCourseId || (l.courseId || 'course-yt-01') === requestedCourseId))
     .sort((a, b) => a.order - b.order)
     .map(lesson => {
-      // If student is enrolled or this is marked free preview, give full playback access
-      const hasAccess = isEnrolled || lesson.isFreePreview;
+      const lessonCourseId = lesson.courseId || 'course-yt-01';
+      const enrolledInThisCourse = isStudentEnrolledInCourse(student, lessonCourseId);
+      const hasAccess = enrolledInThisCourse || lesson.isFreePreview;
       return {
         id: lesson.id,
+        courseId: lessonCourseId,
         order: lesson.order,
         title: lesson.title,
         englishSubtitle: lesson.englishSubtitle,
@@ -622,7 +830,8 @@ app.get('/api/lessons', (req, res) => {
 
   res.json({
     lessons: sanitizedLessons,
-    isEnrolled,
+    isEnrolled: requestedCourseId ? isStudentEnrolledInCourse(student, requestedCourseId) : Boolean(student?.isEnrolled),
+    enrolledCourseIds: getStudentEnrolledCourses(student),
     studentPhone: student?.phone || student?.email
   });
 });
@@ -651,40 +860,111 @@ app.post('/api/lessons/:id/progress', (req, res) => {
 
 // ==================== PAYMENT & VERIFICATION ROUTES ====================
 
+function buildUpiQuery(targetCourse: Course, orderId?: string): string {
+  const cleanNote =
+    (targetCourse.title || 'KP HUBE Course')
+      .replace(/[^a-zA-Z0-9 ]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 40) || 'KP HUBE Course';
+  const amountStr = Number(targetCourse.price).toFixed(2);
+  const params: [string, string][] = [
+    ['pa', UPI_MERCHANT_VPA],
+    ['pn', UPI_MERCHANT_NAME],
+    ['am', amountStr],
+    ['cu', 'INR'],
+    ['tn', cleanNote]
+  ];
+  if (orderId) {
+    params.push(['tr', orderId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 35)]);
+  }
+  return params.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+}
+
+function hasConfiguredRazorpay(): boolean {
+  const validKey =
+    RAZORPAY_KEY_ID.startsWith('rzp_live_') ||
+    (RAZORPAY_KEY_ID.startsWith('rzp_test_') && RAZORPAY_KEY_ID !== 'rzp_test_YourKeyIdHere');
+  return Boolean(
+    validKey &&
+    RAZORPAY_KEY_SECRET.length >= 12 &&
+    RAZORPAY_KEY_SECRET !== 'kphube_mock_secret_key_2026'
+  );
+}
+
 // Get UPI Merchant status & PhonePe QR
-app.get('/api/payment/upi-status', (_req, res) => {
+app.get('/api/payment/upi-status', (req, res) => {
+  const requestedCourseId = typeof req.query.courseId === 'string' ? req.query.courseId.trim() : undefined;
+  const targetCourse = findCourseById(requestedCourseId || 'course-yt-01');
+  const upiQuery = buildUpiQuery(targetCourse);
   res.json({
     verifiedPayeeName: UPI_MERCHANT_NAME,
     verifiedUpiVpa: UPI_MERCHANT_VPA,
     qrImageUrl: '/assets/payment_qr.jpeg',
-    courseAmount: db.course.price,
-    hasLiveGatewayKeys: Boolean(RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET && RAZORPAY_KEY_ID !== 'rzp_test_YourKeyIdHere'),
+    courseAmount: targetCourse.price,
+    hasLiveGatewayKeys: hasConfiguredRazorpay(),
     razorpayKeyId: RAZORPAY_KEY_ID || 'rzp_test_demo_kphube',
     mismatchedQrBlocked: false,
-    upiIntentUrl: `upi://pay?pa=${encodeURIComponent(UPI_MERCHANT_VPA)}&pn=${encodeURIComponent(UPI_MERCHANT_NAME)}&am=${db.course.price}&cu=INR&tn=${encodeURIComponent('KP HUBE Complete YouTube Course')}`
+    upiQuery,
+    upiIntentUrl: `upi://pay?${upiQuery}`
   });
 });
 
 // Create payment order on server
-app.post('/api/payment/create-order', (req, res) => {
+app.post('/api/payment/create-order', async (req, res) => {
   const student = getStudentFromReq(req);
   if (!student) {
     return res.status(401).json({ error: 'Please log in to purchase the course.' });
   }
 
-  if (student.isEnrolled) {
-    return res.status(400).json({ error: 'You are already enrolled in this course.' });
+  const requestedCourseId = typeof req.body?.courseId === 'string' ? req.body.courseId.trim() : undefined;
+  const targetCourse = findCourseById(requestedCourseId || 'course-yt-01');
+
+  if (isStudentEnrolledInCourse(student, targetCourse.id)) {
+    return res.status(400).json({ error: `You are already enrolled in ${targetCourse.title}.` });
   }
 
-  const amountPaise = db.course.price * 100; // 49 * 100 = 4900 paise
+  const amountPaise = targetCourse.price * 100;
   const orderId = `order_kphube_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
   const receiptNumber = `RCPT-${Date.now().toString().slice(-6)}`;
   const studentContact = student.phone || student.email || student.id;
+  const liveGateway = hasConfiguredRazorpay();
+
+  let razorpayOrderId: string | undefined;
+  if (liveGateway) {
+    try {
+      const auth = Buffer.from(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString('base64');
+      const rzpRes = await fetch('https://api.razorpay.com/v1/orders', {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${auth}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          amount: amountPaise,
+          currency: 'INR',
+          receipt: receiptNumber,
+          notes: { courseId: targetCourse.id, courseTitle: targetCourse.title }
+        })
+      });
+      if (rzpRes.ok) {
+        const rzpJson: any = await rzpRes.json();
+        if (rzpJson?.id) razorpayOrderId = rzpJson.id;
+      }
+    } catch {
+      // Fallback cleanly to direct UPI links & QR if gateway unreachable
+    }
+  }
+
+  const serverOrderId = razorpayOrderId || orderId;
+  const upiQuery = buildUpiQuery(targetCourse, serverOrderId);
 
   const paymentRecord: PaymentRecord = {
     id: `pay_${Date.now()}_${crypto.randomBytes(2).toString('hex')}`,
-    orderId,
-    amount: db.course.price,
+    orderId: serverOrderId,
+    courseId: targetCourse.id,
+    courseTitle: targetCourse.title,
+    amount: targetCourse.price,
     currency: 'INR',
     status: 'created',
     method: 'razorpay_upi',
@@ -692,7 +972,7 @@ app.post('/api/payment/create-order', (req, res) => {
     studentName: student.name,
     timestamp: new Date().toISOString(),
     receiptNumber,
-    notes: `Enrollment in ${db.course.title}`
+    notes: `Enrollment in ${targetCourse.title}`
   };
 
   db.payments.push(paymentRecord);
@@ -700,20 +980,37 @@ app.post('/api/payment/create-order', (req, res) => {
 
   return res.json({
     success: true,
-    orderId,
+    orderId: serverOrderId,
+    razorpayOrderId,
+    hasLiveGatewayKeys: Boolean(liveGateway && razorpayOrderId),
+    courseId: targetCourse.id,
     amount: amountPaise,
-    amountRupees: db.course.price,
+    amountRupees: targetCourse.price,
     currency: 'INR',
     receiptNumber,
     key: RAZORPAY_KEY_ID || 'rzp_test_demo_kphube',
-    courseTitle: db.course.title,
+    courseTitle: targetCourse.title,
     studentPhone: studentContact,
     studentName: student.name || 'Student',
     qrImageUrl: '/assets/payment_qr.jpeg',
     upiVpa: UPI_MERCHANT_VPA,
-    upiIntentUrl: `upi://pay?pa=${encodeURIComponent(UPI_MERCHANT_VPA)}&pn=${encodeURIComponent(UPI_MERCHANT_NAME)}&am=${db.course.price}&cu=INR&tn=${encodeURIComponent('KP HUBE Complete YouTube Course')}`
+    upiQuery,
+    upiIntentUrl: `upi://pay?${upiQuery}`
   });
 });
+
+function doesPaymentBelongToStudent(payment: PaymentRecord, student: StoredStudent): boolean {
+  const key = String(payment.studentPhone || '').trim();
+  if (!key) return false;
+  if (key === student.id) return true;
+  if (key.includes('@') && student.email && canonicalEmail(key) === canonicalEmail(student.email)) {
+    return true;
+  }
+  if (!key.includes('@') && student.phone && normalizeIndianPhone(key) === normalizeIndianPhone(student.phone)) {
+    return true;
+  }
+  return false;
+}
 
 // Verify Payment Signature or UPI UTR on server
 app.post('/api/payment/verify', (req, res) => {
@@ -734,13 +1031,30 @@ app.post('/api/payment/verify', (req, res) => {
     return res.status(404).json({ error: 'Payment order record not found.' });
   }
 
-  const studentIdentifiers = new Set([student.id, student.phone, student.email].filter(Boolean));
-  if (!studentIdentifiers.has(paymentRecord.studentPhone)) {
+  if (!doesPaymentBelongToStudent(paymentRecord, student)) {
     return res.status(403).json({ error: 'Unauthorized: Payment order belongs to a different account.' });
   }
 
+  const targetCourse = findCourseById(paymentRecord.courseId || 'course-yt-01');
+
+  if (signature && hasConfiguredRazorpay() && orderId.startsWith('order_')) {
+    const expectedSig = crypto
+      .createHmac('sha256', RAZORPAY_KEY_SECRET)
+      .update(`${orderId}|${refId}`)
+      .digest('hex');
+    if (signature !== expectedSig) {
+      return res.status(400).json({ error: 'Invalid payment gateway signature.' });
+    }
+  }
+
   if (paymentRecord.status === 'paid') {
-    return res.json({ success: true, message: 'Payment already verified.', isEnrolled: true, receiptNumber: paymentRecord.receiptNumber });
+    return res.json({
+      success: true,
+      message: 'Payment already verified.',
+      isEnrolled: true,
+      courseId: targetCourse.id,
+      receiptNumber: paymentRecord.receiptNumber
+    });
   }
 
   // Update payment record to PAID
@@ -749,12 +1063,20 @@ app.post('/api/payment/verify', (req, res) => {
   paymentRecord.signature = signature || 'upi_utr_verified';
   paymentRecord.timestamp = new Date().toISOString();
 
-  // Unlock course for student
+  // Unlock target course for student
+  const currentCourses = getStudentEnrolledCourses(student);
+  if (!currentCourses.includes(targetCourse.id)) {
+    currentCourses.push(targetCourse.id);
+  }
+  student.enrolledCourseIds = currentCourses;
   student.isEnrolled = true;
   student.enrolledAt = new Date().toISOString();
 
   // Increment enrolled count
-  db.course.enrolledCount += 1;
+  targetCourse.enrolledCount += 1;
+  if (targetCourse.id === db.course.id) {
+    db.course.enrolledCount = targetCourse.enrolledCount;
+  }
 
   // Create audit log
   db.auditLogs.push({
@@ -763,7 +1085,7 @@ app.post('/api/payment/verify', (req, res) => {
     adminPhone: 'upi_gateway',
     targetId: student.id,
     targetType: 'payment',
-    details: `Payment of ₹${paymentRecord.amount} verified for student ${getStudentContactLabel(student)} (Ref/UTR: ${refId})`,
+    details: `Payment of ₹${paymentRecord.amount} verified for ${targetCourse.title} (${getStudentContactLabel(student)}, Ref/UTR: ${refId})`,
     timestamp: new Date().toISOString()
   });
 
@@ -771,8 +1093,9 @@ app.post('/api/payment/verify', (req, res) => {
 
   return res.json({
     success: true,
-    message: 'Payment verified successfully! Welcome to KP HUBE Complete YouTube Course.',
+    message: `Payment verified successfully! Welcome to ${targetCourse.title}.`,
     receiptNumber: paymentRecord.receiptNumber,
+    courseId: targetCourse.id,
     isEnrolled: true
   });
 });
@@ -785,9 +1108,8 @@ app.get('/api/payment/history', (req, res) => {
     return res.status(401).json({ error: 'Authentication required' });
   }
 
-  const identifiers = new Set([student.id, student.phone, student.email].filter(Boolean));
   const studentPayments = db.payments
-    .filter(p => identifiers.has(p.studentPhone))
+    .filter(p => doesPaymentBelongToStudent(p, student))
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
   res.json({ payments: studentPayments });
@@ -821,37 +1143,64 @@ app.post('/api/support', (req, res) => {
 
 // ==================== OWNER ADMIN ROUTES ====================
 
-// Admin Login (Strictly Owner Account + Private Master Key + Rate Limit + Ephemeral Session Token)
+// Admin Login (Strictly Owner Gmail + Owner Password or Private Master Key + Rate Limit + Ephemeral Session Token)
 app.post('/api/admin/login', (req, res) => {
-  const student = getStudentFromReq(req);
-  if (!student || !student.email || student.email.toLowerCase() !== OWNER_EMAIL) {
-    return res.status(403).json({ error: 'Access denied: Only the verified owner account can open Admin.' });
-  }
-
-  const rateKey = `${getRateLimitKey(req)}:${student.id}`;
+  const rateKey = getRateLimitKey(req);
   const retryAfter = checkAdminRateLimit(rateKey);
   if (retryAfter) {
     return res.status(429).json({ error: `Too many wrong attempts. Try again in ${retryAfter}s.` });
   }
 
-  const secretKey = String(req.body?.secretKey || '').trim();
-  if (!verifyAdminSecret(secretKey)) {
+  const signedInStudent = getStudentFromReq(req);
+  const candidateEmail = String(req.body?.email || signedInStudent?.email || '').trim();
+  const credential = String(req.body?.password || req.body?.secretKey || '').trim();
+
+  const isOwnerEmailMatch =
+    Boolean(candidateEmail) && canonicalEmail(candidateEmail) === canonicalEmail(OWNER_EMAIL);
+  const ownerStudent = findStudentByIdentifier(canonicalEmail(OWNER_EMAIL), '');
+  const isCredentialMatch =
+    verifyAdminSecret(credential) ||
+    (Boolean(db.adminPasswordHash) && verifyPassword(credential, db.adminPasswordHash)) ||
+    (Boolean(ownerStudent?.passwordHash) && verifyPassword(credential, ownerStudent?.passwordHash));
+
+  if (!isOwnerEmailMatch || !isCredentialMatch) {
     recordAdminFailure(rateKey);
-    return res.status(401).json({ error: 'Incorrect Owner Admin Key.' });
+    return res.status(403).json({ error: 'Access denied: Invalid Owner Gmail or Password.' });
   }
 
   adminFailedAttempts.delete(rateKey);
   const sessionToken = crypto.randomBytes(32).toString('hex');
   adminSessions.set(sessionToken, {
-    studentId: student.id,
+    ownerEmail: OWNER_EMAIL,
     expiresAt: Date.now() + ADMIN_SESSION_TTL_MS
   });
 
   return res.json({
     success: true,
     adminToken: sessionToken,
-    role: 'owner'
+    role: 'owner',
+    portalPath: PRIVATE_ADMIN_PATH
   });
+});
+
+// Set or Update Personal Private Admin Website Password
+app.post('/api/admin/password', requireAdmin, (req, res) => {
+  const newPassword = String(req.body?.newPassword || '');
+  if (newPassword.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters long.' });
+  }
+  db.adminPasswordHash = hashPassword(newPassword);
+  db.auditLogs.push({
+    id: `log_admpass_${Date.now()}`,
+    action: 'ADMIN_PASSWORD_UPDATED',
+    adminPhone: 'owner',
+    targetId: 'admin_portal',
+    targetType: 'course',
+    details: 'Updated personal private Admin Website password.',
+    timestamp: new Date().toISOString()
+  });
+  saveDatabase(db);
+  return res.json({ success: true, message: 'Private Admin password updated successfully.' });
 });
 
 // Admin Overview Statistics
@@ -877,10 +1226,9 @@ app.get('/api/admin/overview', requireAdmin, (_req, res) => {
 // Admin - Get all registered students
 app.get('/api/admin/students', requireAdmin, (_req, res) => {
   const list = db.students.map(s => {
-    const ids = new Set([s.id, s.phone, s.email].filter(Boolean));
     return {
       ...sanitizeStudent(s),
-      purchaseRecord: db.payments.find(p => ids.has(p.studentPhone) && p.status === 'paid')
+      purchaseRecord: db.payments.find(p => doesPaymentBelongToStudent(p, s) && p.status === 'paid')
     };
   });
   res.json({ students: list });
@@ -889,15 +1237,56 @@ app.get('/api/admin/students', requireAdmin, (_req, res) => {
 // Admin - Grant access manually
 app.post('/api/admin/students/:id/grant', requireAdmin, (req, res) => {
   const { id } = req.params;
-  const { reason } = req.body;
+  const { reason, courseId } = req.body;
 
   const student = db.students.find(s => s.id === id || s.phone === id || s.email === id);
   if (!student) {
     return res.status(404).json({ error: 'Student not found.' });
   }
 
+  const targetCourse = findCourseById(courseId || 'course-vip-01');
+  const currentCourses = getStudentEnrolledCourses(student);
+  const alreadyInTarget = currentCourses.includes(targetCourse.id);
+  if (!alreadyInTarget) {
+    currentCourses.push(targetCourse.id);
+  }
+  student.enrolledCourseIds = currentCourses;
   student.isEnrolled = true;
-  student.enrolledAt = new Date().toISOString();
+  student.enrolledAt = student.enrolledAt || new Date().toISOString();
+
+  if (!alreadyInTarget) {
+    targetCourse.enrolledCount += 1;
+    if (targetCourse.id === db.course.id) {
+      db.course.enrolledCount = targetCourse.enrolledCount;
+    }
+  }
+
+  // Record a verified purchase history entry for this course if none exists yet
+  const hasPaidRecord = db.payments.some(
+    p =>
+      doesPaymentBelongToStudent(p, student) &&
+      p.status === 'paid' &&
+      (p.courseId || 'course-yt-01') === targetCourse.id
+  );
+  if (!hasPaidRecord) {
+    const contact = student.email || student.phone || student.id;
+    db.payments.push({
+      id: `pay_grant_${Date.now()}_${crypto.randomBytes(2).toString('hex')}`,
+      orderId: `order_manual_${Date.now()}`,
+      paymentId: `MANUAL-${Date.now().toString().slice(-6)}`,
+      courseId: targetCourse.id,
+      courseTitle: targetCourse.title,
+      amount: targetCourse.price,
+      currency: 'INR',
+      status: 'paid',
+      method: 'manual_admin',
+      studentPhone: contact,
+      studentName: student.name,
+      timestamp: new Date().toISOString(),
+      receiptNumber: `RCPT-${Date.now().toString().slice(-6)}`,
+      notes: String(reason || `Owner manual enrollment (${targetCourse.title})`).trim()
+    });
+  }
 
   // Add audit log
   db.auditLogs.push({
@@ -906,7 +1295,7 @@ app.post('/api/admin/students/:id/grant', requireAdmin, (req, res) => {
     adminPhone: 'owner',
     targetId: student.id,
     targetType: 'student',
-    details: `Owner manually granted access to ${getStudentContactLabel(student)}. Note: ${reason || 'VIP / Offline enrollment'}`,
+    details: `Owner manually granted access to ${targetCourse.title} for ${getStudentContactLabel(student)}. Note: ${reason || 'VIP / Offline enrollment'}`,
     timestamp: new Date().toISOString()
   });
 
@@ -917,14 +1306,21 @@ app.post('/api/admin/students/:id/grant', requireAdmin, (req, res) => {
 // Admin - Revoke access manually
 app.post('/api/admin/students/:id/revoke', requireAdmin, (req, res) => {
   const { id } = req.params;
-  const { reason } = req.body;
+  const { reason, courseId } = req.body;
 
   const student = db.students.find(s => s.id === id || s.phone === id || s.email === id);
   if (!student) {
     return res.status(404).json({ error: 'Student not found.' });
   }
 
-  student.isEnrolled = false;
+  if (courseId) {
+    const nextCourses = getStudentEnrolledCourses(student).filter(cId => cId !== courseId);
+    student.enrolledCourseIds = nextCourses;
+    student.isEnrolled = nextCourses.length > 0;
+  } else {
+    student.enrolledCourseIds = [];
+    student.isEnrolled = false;
+  }
 
   db.auditLogs.push({
     id: `log_revoke_${Date.now()}`,
@@ -947,31 +1343,45 @@ app.get('/api/admin/payments', requireAdmin, (_req, res) => {
   });
 });
 
-// Admin - Update Course Info
+// Admin - Update Course Info (supports updating any course by id)
 app.put('/api/admin/course', requireAdmin, (req, res) => {
-  const updates = req.body;
-  db.course = { ...db.course, ...updates };
+  const updates = req.body || {};
+  const targetId = typeof updates.id === 'string' && updates.id ? updates.id : db.course.id;
+  const courses = getAllCourses();
+  const idx = courses.findIndex(c => c.id === targetId);
+  const updatedCourse = idx >= 0 ? { ...courses[idx], ...updates } : { ...db.course, ...updates };
+
+  if (idx >= 0) {
+    courses[idx] = updatedCourse;
+    db.courses = courses;
+  }
+  if (updatedCourse.id === db.course.id) {
+    db.course = updatedCourse;
+  }
 
   db.auditLogs.push({
     id: `log_crs_${Date.now()}`,
     action: 'COURSE_SETTINGS_UPDATED',
     adminPhone: 'owner',
-    targetId: db.course.id,
+    targetId: updatedCourse.id,
     targetType: 'course',
-    details: `Course settings updated. New price: ₹${db.course.price}`,
+    details: `Updated "${updatedCourse.title}" (Price: ₹${updatedCourse.price})`,
     timestamp: new Date().toISOString()
   });
 
   saveDatabase(db);
-  res.json({ success: true, course: db.course });
+  res.json({ success: true, course: updatedCourse, courses: getAllCourses() });
 });
 
-// Admin - Add lesson
+// Admin - Add lesson (to a specific courseId)
 app.post('/api/admin/lessons', requireAdmin, (req, res) => {
+  const targetCourseId = typeof req.body.courseId === 'string' && req.body.courseId ? req.body.courseId : 'course-vip-01';
+  const courseLessons = db.lessons.filter(l => (l.courseId || 'course-yt-01') === targetCourseId);
   const newLesson: Lesson = {
     id: `episode-${Date.now()}`,
-    order: db.lessons.length + 1,
-    title: req.body.title || `Episode ${db.lessons.length + 1}`,
+    courseId: targetCourseId,
+    order: courseLessons.length + 1,
+    title: req.body.title || `Episode ${courseLessons.length + 1}`,
     englishSubtitle: req.body.englishSubtitle || '',
     description: req.body.description || '',
     durationMinutes: Number(req.body.durationMinutes) || 0,
@@ -984,7 +1394,12 @@ app.post('/api/admin/lessons', requireAdmin, (req, res) => {
   };
 
   db.lessons.push(newLesson);
-  db.course.totalLessons = db.lessons.length;
+  const courses = getAllCourses();
+  courses.forEach(c => {
+    c.totalLessons = db.lessons.filter(l => (l.courseId || 'course-yt-01') === c.id).length;
+  });
+  db.courses = courses;
+  db.course.totalLessons = db.lessons.filter(l => (l.courseId || 'course-yt-01') === db.course.id).length;
 
   db.auditLogs.push({
     id: `log_les_add_${Date.now()}`,
@@ -992,7 +1407,7 @@ app.post('/api/admin/lessons', requireAdmin, (req, res) => {
     adminPhone: 'owner',
     targetId: newLesson.id,
     targetType: 'lesson',
-    details: `Added new lesson "${newLesson.title}"`,
+    details: `Added new lesson "${newLesson.title}" (${targetCourseId})`,
     timestamp: new Date().toISOString()
   });
 
@@ -1042,7 +1457,7 @@ app.put('/api/admin/lessons/:id', requireAdmin, (req, res) => {
   res.json({ success: true, lesson: updated });
 });
 
-// Admin - Delete lesson
+// Admin - Delete lesson (per-course re-indexing)
 app.delete('/api/admin/lessons/:id', requireAdmin, (req, res) => {
   const { id } = req.params;
   const lesson = db.lessons.find(l => l.id === id);
@@ -1050,12 +1465,23 @@ app.delete('/api/admin/lessons/:id', requireAdmin, (req, res) => {
     return res.status(404).json({ error: 'Lesson not found' });
   }
 
+  const targetCourseId = lesson.courseId || 'course-yt-01';
   db.lessons = db.lessons.filter(l => l.id !== id);
-  // Re-order remaining
-  db.lessons.forEach((l, idx) => {
+
+  // Re-order remaining lessons inside the affected course only
+  const courseLessons = db.lessons
+    .filter(l => (l.courseId || 'course-yt-01') === targetCourseId)
+    .sort((a, b) => a.order - b.order);
+  courseLessons.forEach((l, idx) => {
     l.order = idx + 1;
   });
-  db.course.totalLessons = db.lessons.length;
+
+  const courses = getAllCourses();
+  courses.forEach(c => {
+    c.totalLessons = db.lessons.filter(l => (l.courseId || 'course-yt-01') === c.id).length;
+  });
+  db.courses = courses;
+  db.course.totalLessons = db.lessons.filter(l => (l.courseId || 'course-yt-01') === db.course.id).length;
 
   db.auditLogs.push({
     id: `log_les_del_${Date.now()}`,
@@ -1063,39 +1489,43 @@ app.delete('/api/admin/lessons/:id', requireAdmin, (req, res) => {
     adminPhone: 'owner',
     targetId: id,
     targetType: 'lesson',
-    details: `Deleted lesson: "${lesson.title}"`,
+    details: `Deleted lesson: "${lesson.title}" (${targetCourseId})`,
     timestamp: new Date().toISOString()
   });
 
   saveDatabase(db);
-  res.json({ success: true, remainingCount: db.lessons.length });
+  res.json({ success: true, remainingCount: courseLessons.length });
 });
 
-// Admin - Reorder lessons
+// Admin - Reorder lessons (per-course scoped)
 app.post('/api/admin/lessons/reorder', requireAdmin, (req, res) => {
-  const { orderedIds } = req.body as { orderedIds: string[] };
+  const { orderedIds, courseId } = req.body as { orderedIds: string[]; courseId?: string };
   if (!Array.isArray(orderedIds)) {
     return res.status(400).json({ error: 'Invalid orderedIds array' });
   }
 
-  const newLessonsList: Lesson[] = [];
+  const firstLesson = orderedIds.length > 0 ? db.lessons.find(l => l.id === orderedIds[0]) : undefined;
+  const targetCourseId = courseId || firstLesson?.courseId || 'course-yt-01';
+
+  const reorderedCourseLessons: Lesson[] = [];
   orderedIds.forEach((id, index) => {
-    const lesson = db.lessons.find(l => l.id === id);
+    const lesson = db.lessons.find(l => l.id === id && (l.courseId || 'course-yt-01') === targetCourseId);
     if (lesson) {
       lesson.order = index + 1;
-      newLessonsList.push(lesson);
+      reorderedCourseLessons.push(lesson);
     }
   });
 
-  // Append any not in array
+  // Append any lessons in that same course missing from orderedIds
   db.lessons.forEach(l => {
-    if (!orderedIds.includes(l.id)) {
-      l.order = newLessonsList.length + 1;
-      newLessonsList.push(l);
+    if ((l.courseId || 'course-yt-01') === targetCourseId && !orderedIds.includes(l.id)) {
+      l.order = reorderedCourseLessons.length + 1;
+      reorderedCourseLessons.push(l);
     }
   });
 
-  db.lessons = newLessonsList;
+  const otherLessons = db.lessons.filter(l => (l.courseId || 'course-yt-01') !== targetCourseId);
+  db.lessons = [...reorderedCourseLessons, ...otherLessons];
   saveDatabase(db);
   res.json({ success: true, lessons: db.lessons });
 });
@@ -1236,6 +1666,7 @@ app.get('/api/admin/backup', requireAdmin, (_req, res) => {
     app: 'KP HUBE',
     data: {
       course: db.course,
+      courses: getAllCourses(),
       lessons: db.lessons,
       students: db.students,
       payments: db.payments,
@@ -1252,15 +1683,23 @@ app.post('/api/admin/restore', requireAdmin, (req, res) => {
     return res.status(400).json({ error: 'Invalid backup JSON structure. Missing course or lessons.' });
   }
 
+  const synced = ensureCoursesAndLessons(
+    payload.course,
+    Array.isArray(payload.courses) ? payload.courses : undefined,
+    payload.lessons
+  );
+
   db = {
-    course: payload.course,
-    lessons: payload.lessons,
+    course: synced.courses.find(c => c.id === 'course-yt-01') || synced.courses[0] || payload.course,
+    courses: synced.courses,
+    lessons: synced.lessons,
     students: Array.isArray(payload.students) ? payload.students : [],
     payments: Array.isArray(payload.payments) ? payload.payments : [],
     auditLogs: Array.isArray(payload.auditLogs) ? payload.auditLogs : [],
     supportTickets: Array.isArray(payload.supportTickets) ? payload.supportTickets : [],
     otps: {},
-    apkDownloadUrl: typeof payload.apkDownloadUrl === 'string' ? payload.apkDownloadUrl : (db.apkDownloadUrl || '')
+    apkDownloadUrl: typeof payload.apkDownloadUrl === 'string' ? payload.apkDownloadUrl : (db.apkDownloadUrl || ''),
+    adminPasswordHash: db.adminPasswordHash
   };
 
   db.auditLogs.push({
@@ -1297,6 +1736,7 @@ async function startServer() {
       p === '/package.json' ||
       p === '/bun.lock' ||
       p === '/metadata.json' ||
+      p === '/kp-owner-portal.html' ||
       p.endsWith('.zip') ||
       p.endsWith('.keystore')
     ) {
@@ -1375,23 +1815,85 @@ export class ErrorOverlay extends HTMLElement {}
 `);
     });
 
-    const vite = await createViteServer({
-      server: { middlewareMode: true, hmr: false, ws: false },
-      appType: 'spa'
+    app.get('/api/health', (_req, res) => {
+      res.status(200).json({ ok: true });
     });
-    app.use(vite.middlewares);
+
+    const vitePromise = import('vite').then(({ createServer }) =>
+      createServer({
+        server: { middlewareMode: true, hmr: false, ws: false },
+        appType: 'spa'
+      })
+    );
+
+    // Dedicated Private Owner Admin Website Route (Not linked anywhere on public site)
+    app.get(PRIVATE_ADMIN_PATH, async (req, res, next) => {
+      try {
+        const vite = await vitePromise;
+        const htmlPath = path.resolve(process.cwd(), 'kp-owner-portal.html');
+        const rawHtml = fs.readFileSync(htmlPath, 'utf-8');
+        const transformed = await vite.transformIndexHtml(req.originalUrl, rawHtml);
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+        res.status(200).type('html').send(transformed);
+      } catch (e) {
+        next(e);
+      }
+    });
+
+    app.use(async (req, res, next) => {
+      try {
+        const vite = await vitePromise;
+        vite.middlewares(req, res, next);
+      } catch (e) {
+        next(e);
+      }
+    });
   } else {
+    app.get('/api/health', (_req, res) => {
+      res.status(200).json({ ok: true });
+    });
+
     const distPath = path.resolve(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+
+    // Dedicated Private Owner Admin Website Route (Production)
+    app.get(PRIVATE_ADMIN_PATH, (_req, res) => {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+      res.sendFile(path.join(distPath, 'kp-owner-portal.html'));
+    });
+
+    app.use(
+      express.static(distPath, {
+        setHeaders: (res, filePath) => {
+          if (
+            filePath.endsWith('.html') ||
+            filePath.endsWith('sw.js') ||
+            filePath.endsWith('registerSW.js') ||
+            filePath.endsWith('manifest.webmanifest')
+          ) {
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+          }
+        }
+      })
+    );
     app.get('*', (_req, res) => {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`[KP HUBE] Server listening on http://0.0.0.0:${PORT}`);
     console.log(`[KP HUBE] Verified UPI VPA: ${UPI_MERCHANT_VPA} (${UPI_MERCHANT_NAME})`);
   });
+
+  const shutdown = () => {
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(0), 1500).unref();
+  };
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
 }
 
 startServer();

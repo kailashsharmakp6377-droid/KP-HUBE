@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   User, Smartphone, BookOpen, Receipt, HelpCircle, 
-  LogOut, Trash2, CheckCircle2, ChevronRight, Edit3, ShieldCheck
+  LogOut, Trash2, CheckCircle2, ChevronRight, Edit3
 } from 'lucide-react';
 import { api } from '../services/api.ts';
 import type { Student, PaymentRecord } from '../types/index.ts';
@@ -17,7 +17,6 @@ interface ProfileScreenProps {
   onOpenAccountDeletion: () => void;
   onViewReceipt: (payment: PaymentRecord) => void;
   onRefreshStudent: () => void;
-  onOpenOwnerConsole?: () => void;
 }
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({
@@ -30,8 +29,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   onOpenSupport,
   onOpenAccountDeletion,
   onViewReceipt,
-  onRefreshStudent,
-  onOpenOwnerConsole
+  onRefreshStudent
 }) => {
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [editingName, setEditingName] = useState(false);
@@ -207,26 +205,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           </div>
           <ChevronRight className="w-4 h-4 text-slate-400" />
         </button>
-
-        {student.isOwner && onOpenOwnerConsole && (
-          <button
-            onClick={onOpenOwnerConsole}
-            className="w-full py-3.5 px-3 flex items-center justify-between hover:bg-indigo-50/70 rounded-xl transition-colors text-left"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center">
-                <ShieldCheck className="w-4 h-4" />
-              </div>
-              <div>
-                <span className="text-xs font-bold text-indigo-950 block">Owner Admin Console</span>
-                <span className="text-[11px] text-indigo-600">
-                  Private dashboard (visible only to you)
-                </span>
-              </div>
-            </div>
-            <ChevronRight className="w-4 h-4 text-indigo-400" />
-          </button>
-        )}
       </section>
 
       {/* 3. Payment & Purchase History */}

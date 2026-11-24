@@ -90,7 +90,7 @@ define(['./workbox-afac4cd2'], (function (workbox) { 'use strict';
     "revision": "0e5bd9c4a69f2f372045f4d0ede71bb3"
   }, {
     "url": "index.html",
-    "revision": "27b610d71bc4642d9cd8f8996648f00c"
+    "revision": "03d1b6fa1aa94bf618d205c48ae652c6"
   }, {
     "url": "icon.svg",
     "revision": "b3050e2dddfa02183a6c7b8f5c7828a3"
@@ -98,10 +98,13 @@ define(['./workbox-afac4cd2'], (function (workbox) { 'use strict';
     "url": "apple-touch-icon.png",
     "revision": "1e9940c8a5430a6d81a0801a0c095208"
   }, {
-    "url": "assets/index-xaXlu9um.js",
+    "url": "assets/src-DldMfya0.js",
     "revision": null
   }, {
-    "url": "assets/index-4_6N_AVK.css",
+    "url": "assets/src-BuzWWRrh.css",
+    "revision": null
+  }, {
+    "url": "assets/main-BiJoHSNl.js",
     "revision": null
   }, {
     "url": "assets/icon.svg",
@@ -111,6 +114,9 @@ define(['./workbox-afac4cd2'], (function (workbox) { 'use strict';
     "revision": null
   }, {
     "url": "assets/founder-graphic.svg",
+    "revision": null
+  }, {
+    "url": "assets/admin-OZcP6L4G.js",
     "revision": null
   }, {
     "url": "assets/aistudio/ChatGPT_Image_Nov_11__2026__01_14_21_AM_0b7c75c3.svg",
@@ -136,6 +142,7 @@ define(['./workbox-afac4cd2'], (function (workbox) { 'use strict';
   }], {});
   workbox.cleanupOutdatedCaches();
   workbox.registerRoute(new workbox.NavigationRoute(workbox.createHandlerBoundToURL("index.html"), {
+    allowlist: [/^\/$/],
     denylist: [/^\/api\//, /^\/kphube-android-project\.zip$/]
   }));
   workbox.registerRoute(/^https:\/\/fonts\.googleapis\.com\/.*/i, new workbox.CacheFirst({

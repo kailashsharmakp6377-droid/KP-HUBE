@@ -51,7 +51,12 @@ export default defineConfig(() => {
           ],
         },
         workbox: {
+          cleanupOutdatedCaches: true,
+          clientsClaim: true,
+          skipWaiting: true,
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+          globIgnores: ['**/kp-owner-portal.html'],
+          navigateFallbackAllowlist: [/^\/$/],
           navigateFallbackDenylist: [/^\/api\//, /^\/kphube-android-project\.zip$/],
           runtimeCaching: [
             {
@@ -85,14 +90,21 @@ export default defineConfig(() => {
           ],
         },
         devOptions: {
-          enabled: true,
-          type: 'module',
+          enabled: false,
         },
       }),
     ],
     resolve: {
       alias: {
         '@': path.resolve('.'),
+      },
+    },
+    build: {
+      rollupOptions: {
+        input: {
+          main: path.resolve('index.html'),
+          admin: path.resolve('kp-owner-portal.html'),
+        },
       },
     },
     server: {

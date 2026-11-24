@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Play, SkipBack, SkipForward, CheckCircle2, Lock, 
-  FileText, Clock, ChevronRight, Check, ArrowLeft
+  FileText, Clock, ChevronRight, Check, ArrowLeft, Crown
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { api } from '../services/api.ts';
@@ -9,8 +9,11 @@ import type { Lesson, Student, Course } from '../types/index.ts';
 
 interface MyCourseScreenProps {
   course: Course;
+  courses?: Course[];
+  onSelectCourse?: (courseId: string) => void;
   lessons: Lesson[];
   student: Student | null;
+  isEnrolled?: boolean;
   onOpenPayment: () => void;
   selectedLessonId?: string;
   onRefreshStudent: () => void;
@@ -19,14 +22,18 @@ interface MyCourseScreenProps {
 
 export const MyCourseScreen: React.FC<MyCourseScreenProps> = ({
   course,
+  courses,
+  onSelectCourse,
   lessons,
   student,
+  isEnrolled: isEnrolledProp,
   onOpenPayment,
   selectedLessonId,
   onRefreshStudent,
   onBackToCourse
 }) => {
-  const isEnrolled = student?.isEnrolled || false;
+  const isEnrolled = isEnrolledProp ?? (student?.isEnrolled || false);
+  const allCourses = courses && courses.length > 0 ? courses : [course];
 
   const [activeLessonId, setActiveLessonId] = useState<string | undefined>(
     () => selectedLessonId || lessons[0]?.id
@@ -38,8 +45,10 @@ export const MyCourseScreen: React.FC<MyCourseScreenProps> = ({
   useEffect(() => {
     if (selectedLessonId) {
       setActiveLessonId(selectedLessonId);
+    } else if (lessons.length > 0 && !lessons.some(l => l.id === activeLessonId)) {
+      setActiveLessonId(lessons[0].id);
     }
-  }, [selectedLessonId]);
+  }, [selectedLessonId, course.id, lessons]);
 
   const activeLesson =
     lessons.find(l => l.id === activeLessonId) || lessons[0] || null;
@@ -84,7 +93,32 @@ export const MyCourseScreen: React.FC<MyCourseScreenProps> = ({
   // Unenrolled locked paywall screen
   if (!isEnrolled && (!activeLesson || !activeLesson.isFreePreview)) {
     return (
-      <div className="space-y-6 pb-24 animate-fade-in text-center max-w-lg mx-auto py-8">
+      <div className="space-y-6 pb-24 animate-fade-in text-center max-w-lg mx-auto py-6">
+        {allCourses.length > 1 && onSelectCourse && (
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {allCourses.map((c) => {
+              const isSelected = c.id === course.id;
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => onSelectCourse(c.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all flex items-center gap-1.5 ${
+                    isSelected
+                      ? c.isMain
+                        ? 'bg-purple-900 text-amber-300 border-amber-400/50 shadow-sm'
+                        : 'bg-purple-700 text-white border-purple-700 shadow-sm'
+                      : 'bg-white text-slate-700 border-slate-200 hover:border-purple-300'
+                  }`}
+                >
+                  {c.isMain && <Crown className="w-3.5 h-3.5 text-amber-400" />}
+                  <span className="truncate max-w-[160px]">{c.isMain ? 'VIP Main Course' : c.title}</span>
+                  <span className="font-mono opacity-85">₹{c.price}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         <div className="w-16 h-16 rounded-3xl bg-purple-100 text-purple-700 flex items-center justify-center mx-auto shadow-sm">
           <Lock className="w-8 h-8" />
         </div>
@@ -144,6 +178,31 @@ export const MyCourseScreen: React.FC<MyCourseScreenProps> = ({
 
   return (
     <div className="space-y-6 pb-24 animate-fade-in">
+      {allCourses.length > 1 && onSelectCourse && (
+        <div className="flex flex-wrap items-center gap-2 bg-white p-2 rounded-2xl border border-slate-200 shadow-xs">
+          {allCourses.map((c) => {
+            const isSelected = c.id === course.id;
+            return (
+              <button
+                key={c.id}
+                onClick={() => onSelectCourse(c.id)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                  isSelected
+                    ? c.isMain
+                      ? 'bg-purple-900 text-amber-300 shadow-sm'
+                      : 'bg-purple-700 text-white shadow-sm'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                {c.isMain && <Crown className="w-3.5 h-3.5 text-amber-400" />}
+                <span>{c.isMain ? 'VIP Course (Main)' : c.title}</span>
+                <span className="font-mono opacity-85">₹{c.price}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {!isEnrolled && onBackToCourse && (
         <div className="flex flex-wrap items-center justify-between gap-2 bg-purple-50 border border-purple-200/80 rounded-2xl px-4 py-2.5 text-xs">
           <button
@@ -349,7 +408,7 @@ export const MyCourseScreen: React.FC<MyCourseScreenProps> = ({
         <div className="flex items-center justify-between">
           <h3 className="font-brand font-bold text-base text-slate-900">All {lessons.length} Course Episodes</h3>
           <span className="text-xs text-slate-500 font-mono">
-            {student ? student.completedLessonIds.length : 0} of {lessons.length} Completed
+            {student ? student.completedLessonIds.filter(id => lessons.some(l => l.id === id)).length : 0} of {lessons.length} Completed
           </span>
         </div>
 

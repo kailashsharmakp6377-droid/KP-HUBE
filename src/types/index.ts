@@ -3,7 +3,7 @@ export interface Course {
   title: string;
   tagline: string;
   description: string;
-  price: number; // in INR e.g. 49
+  price: number; // in INR e.g. 49 or 199
   originalPrice: number; // in INR e.g. 1999
   bannerImage: string;
   founderName: string; // "Founder & Mentor"
@@ -13,12 +13,15 @@ export interface Course {
   totalLessons: number;
   enrolledCount: number;
   features: string[];
+  isMain?: boolean;
+  badge?: string;
 }
 
 export interface Lesson {
   id: string;
+  courseId?: string;
   order: number;
-  title: string; // Roman Hindi title
+  title: string; // Episode title
   englishSubtitle: string;
   description: string;
   durationMinutes: number;
@@ -28,6 +31,8 @@ export interface Lesson {
   pdfTitle?: string;
   isPublished: boolean;
   isFreePreview: boolean;
+  isLocked?: boolean;
+  isCompleted?: boolean;
 }
 
 export interface Student {
@@ -36,6 +41,7 @@ export interface Student {
   email?: string; // Gmail / Email address
   name?: string;
   isEnrolled: boolean;
+  enrolledCourseIds?: string[];
   enrolledAt?: string;
   role: 'student' | 'admin';
   isOwner?: boolean;
@@ -48,7 +54,9 @@ export interface PaymentRecord {
   id: string;
   orderId: string;
   paymentId?: string;
-  amount: number; // ₹49
+  courseId?: string;
+  courseTitle?: string;
+  amount: number; // e.g. 49 or 199
   currency: string; // 'INR'
   status: 'created' | 'paid' | 'failed';
   method: 'razorpay_upi' | 'razorpay_card' | 'razorpay_netbanking' | 'manual_admin' | 'gateway_test';
